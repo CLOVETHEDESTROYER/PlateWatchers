@@ -1,0 +1,7 @@
+{
+  "name": "Plate Watchers",
+  "description": "Discover and rank the best restaurants in any city. Vote for your top picks across different categories and see what the community loves, powered by real-time Google Maps data.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
