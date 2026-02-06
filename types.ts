@@ -9,6 +9,18 @@ export interface Restaurant {
   googleMapsUri: string;
   basePoints: number; // Simulated community points
   sourceUrl?: string; // URL from search grounding
+  source?: 'seeded' | 'user-submitted'; // How the restaurant was added
+  submittedAt?: number; // Timestamp when user submitted
+  googlePlaceType?: string; // Official Google Place Type (e.g. hamburger_restaurant)
+}
+
+export interface AuthenticatedVote {
+  userId: string;
+  userName: string;
+  restaurantId: string;
+  category: string;
+  voteType: 'top' | 'runnerUp';
+  timestamp: number;
 }
 
 export interface CategoryVote {
