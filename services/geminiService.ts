@@ -50,25 +50,26 @@ export const fetchRestaurants = async (query: string, location: string, coords?:
 
     try {
       const searchTerm = query.trim() || "the best local food and hidden gems";
-      const prompt = `Search for "${searchTerm}" in ${location}. 
-      If a specific restaurant name is provided, include it and its top-tier competitors/similar spots in the area.
+      const prompt = `Search for "${searchTerm}" in ${location}.
+      CRITICAL: Only include restaurants physically located in Albuquerque, New Mexico. 
+      Do NOT include places in Santa Fe, Rio Rancho, Bernalillo, or other nearby towns.
       Return a diverse mix of at least 25-30 spots.
+
+        CRITICAL: For "googlePlaceType", you MUST select ONE from this OFFICIAL Google Places list:
+      "american_restaurant", "bakery", "bar", "bar_and_grill", "barbecue_restaurant",
+        "brazilian_restaurant", "breakfast_restaurant", "brunch_restaurant",
+        "cafe", "chinese_restaurant", "coffee_shop", "deli", "dessert_shop", "diner",
+        "donut_shop", "fast_food_restaurant", "fine_dining_restaurant", "hamburger_restaurant",
+        "ice_cream_shop", "indian_restaurant", "italian_restaurant", "japanese_restaurant",
+        "mexican_restaurant", "pizza_restaurant", "seafood_restaurant", "steak_house",
+        "sushi_restaurant", "thai_restaurant", "vegetarian_restaurant", "vietnamese_restaurant".
       
-      CRITICAL: For "googlePlaceType", you MUST select ONE from this OFFICIAL Google Places list:
-      "american_restaurant", "bakery", "bar", "bar_and_grill", "barbecue_restaurant", 
-      "brazilian_restaurant", "breakfast_restaurant", "brunch_restaurant", 
-      "cafe", "chinese_restaurant", "coffee_shop", "deli", "dessert_shop", "diner", 
-      "donut_shop", "fast_food_restaurant", "fine_dining_restaurant", "hamburger_restaurant", 
-      "ice_cream_shop", "indian_restaurant", "italian_restaurant", "japanese_restaurant", 
-      "mexican_restaurant", "pizza_restaurant", "seafood_restaurant", "steak_house", 
-      "sushi_restaurant", "thai_restaurant", "vegetarian_restaurant", "vietnamese_restaurant".
-      
-      If none fit perfectly, choose the closest match (e.g. "gastropub" -> "bar_and_grill").
+      If none fit perfectly, choose the closest match(e.g. "gastropub" -> "bar_and_grill").
 
       Output MUST be a RAW JSON array of objects using DOUBLE QUOTES only:
-      [{"name": "Official Name", "googlePlaceType": "place_type_from_list", "address": "Full Street Address", "detail": "Short description"}]
+        [{ "name": "Official Name", "googlePlaceType": "place_type_from_list", "address": "Full Street Address, Albuquerque, NM", "detail": "Short description" }]
       
-      DO NOT use backticks for strings. DO NOT include any text outside the JSON array.
+      DO NOT use backticks for strings.DO NOT include any text outside the JSON array.
       Verify activity and address via Google Search.`;
 
       // Use gemini-2.5-flash which is the standard model family for Google Maps grounding as per guidelines.
@@ -151,6 +152,15 @@ export const fetchRestaurants = async (query: string, location: string, coords?:
         // We strip non-alphanumeric chars from the base64 to be safe for document IDs
         const idBase = `${safeName}-${location}`.toLowerCase().trim();
         const deterministicId = safeBtoa(idBase).replace(/[^a-zA-Z0-9]/g, '').slice(0, 24);
+
+        // Strict Geography Filter: Address must contain Albuquerque or ABQ
+        const fullAddress = (res.address || "").toLowerCase();
+        const isABQ = fullAddress.includes('albuquerque') || fullAddress.includes('abq') || fullAddress.includes('871');
+
+        if (!isABQ) {
+          console.warn(`Filtering out non-ABQ spot: ${safeName} at ${res.address}`);
+          return;
+        }
 
         finalRestaurants.push({
           id: deterministicId,
@@ -249,9 +259,9 @@ export const validateRestaurant = async (
 
 CRITICAL REQUIREMENTS:
 1. The place MUST have a verified listing on Google Maps. 
-2. The place MUST be located in or very near ${location}.
+2. The place MUST be located strictly within Albuquerque, New Mexico. (No Santa Fe, Rio Rancho, etc.)
 3. The place MUST be open and currently in business.
-4. If you find multiple locations, pick the one closest to ${location} city center or the primary location.
+4. If you find multiple locations, pick the one in Albuquerque.
 
 If the place is VERIFIED on Google Maps and meets ALL criteria, return this EXACT JSON:
 {"valid": true, "name": "Official Name", "googlePlaceType": "place_type_from_list", "address": "Full Street Address", "detail": "Brief description"}

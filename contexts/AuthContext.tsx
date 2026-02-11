@@ -1,29 +1,61 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { User, onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
+import { User, onAuthStateChanged, signInWithPopup, signOut, signInWithEmailAndPassword, sendPasswordResetEmail, createUserWithEmailAndPassword } from "firebase/auth";
 import { auth, facebookProvider, googleProvider } from "../firebase";
 
 interface AuthContextType {
     user: User | null;
+    isAdmin: boolean;
     loading: boolean;
     loginWithFacebook: () => Promise<void>;
     loginWithGoogle: () => Promise<void>;
+    loginWithEmail: (email: string, pass: string) => Promise<void>;
+    registerAdmin: (email: string, pass: string) => Promise<void>;
+    resetPassword: (email: string) => Promise<void>;
     logout: () => Promise<void>;
     error: string | null;
 }
 
 const AuthContext = createContext<AuthContextType>({
     user: null,
+    isAdmin: false,
     loading: true,
     loginWithFacebook: async () => { },
     loginWithGoogle: async () => { },
+    loginWithEmail: async () => { },
+    registerAdmin: async () => { },
+    resetPassword: async () => { },
     logout: async () => { },
     error: null,
 });
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null);
+    const [isAdmin, setIsAdmin] = useState(false);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+
+    // Diagnostics and Admin logic
+    useEffect(() => {
+        if (user) {
+            console.log("🔒 Auth User Info:", {
+                uid: user.uid,
+                email: user.email,
+                displayName: user.displayName,
+                providerData: user.providerData
+            });
+
+            // Hardcoded Admin Email
+            const ADMIN_EMAIL = 'analoguepro@gmail.com';
+            const isAdminByEmail = user.email === ADMIN_EMAIL;
+
+            // Fallback: Check provider data as Facebook sometimes hides email
+            const isAdminByProvider = user.providerData.some(p => p.email === ADMIN_EMAIL);
+
+            setIsAdmin(isAdminByEmail || isAdminByProvider);
+        } else {
+            setIsAdmin(false);
+        }
+    }, [user]);
 
     useEffect(() => {
         if (!auth) {
@@ -66,6 +98,58 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
     };
 
+    const loginWithEmail = async (email: string, pass: string) => {
+        setError(null);
+        try {
+            if (!auth) throw new Error("Firebase Auth not initialized");
+            await signInWithEmailAndPassword(auth, email, pass);
+        } catch (err: any) {
+            console.error("Email Login failed", err);
+            if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+                setError("Invalid email or password.");
+            } else if (err.code === 'auth/operation-not-allowed') {
+                setError("Email/Password login is not enabled in Firebase Console.");
+            } else {
+                setError("Login failed. Check console.");
+            }
+            throw err;
+        }
+    };
+
+    const registerAdmin = async (email: string, pass: string) => {
+        setError(null);
+        try {
+            if (!auth) throw new Error("Firebase Auth not initialized");
+            await createUserWithEmailAndPassword(auth, email, pass);
+        } catch (err: any) {
+            console.error("Admin Registration failed", err);
+            if (err.code === 'auth/email-already-in-use') {
+                setError("Account already exists. Try signing in.");
+            } else if (err.code === 'auth/operation-not-allowed') {
+                setError("Email/Password login is not enabled in Firebase Console.");
+            } else {
+                setError("Registration failed. Check console.");
+            }
+            throw err;
+        }
+    };
+
+    const resetPassword = async (email: string) => {
+        setError(null);
+        try {
+            if (!auth) throw new Error("Firebase Auth not initialized");
+            await sendPasswordResetEmail(auth, email);
+        } catch (err: any) {
+            console.error("Password reset failed", err);
+            if (err.code === 'auth/user-not-found') {
+                setError("No account found with that email.");
+            } else {
+                setError("Failed to send reset email.");
+            }
+            throw err;
+        }
+    };
+
     const logout = async () => {
         try {
             if (!auth) return;
@@ -76,7 +160,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     return (
-        <AuthContext.Provider value={{ user, loading, loginWithFacebook, loginWithGoogle, logout, error }}>
+        <AuthContext.Provider value={{ user, isAdmin, loading, loginWithFacebook, loginWithGoogle, loginWithEmail, registerAdmin, resetPassword, logout, error }}>
             {children}
         </AuthContext.Provider>
     );

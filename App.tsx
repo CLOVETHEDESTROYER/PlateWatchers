@@ -1,19 +1,21 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { fetchRestaurants } from './services/geminiService';
-import { saveRestaurantsBatch, getSavedRestaurants, deleteUserVotes } from './services/restaurantService';
+import { saveRestaurantsBatch, getSavedRestaurants, deleteUserVotes, approveSuggestion, rejectSuggestion, getPendingSuggestions, deleteRestaurant } from './services/restaurantService';
 import { Restaurant, UserVoteRecord, SearchResult, Coordinates, CategoryVote } from './types';
 import RestaurantCard from './components/RestaurantCard';
 import SuggestModal from './components/SuggestModal';
 import AllRestaurantsView from './components/AllRestaurantsView';
+import AdminDashboard from './components/AdminDashboard';
+import AdminLoginModal from './components/AdminLoginModal';
 import { useAuth } from './contexts/AuthContext';
 import { db, isConfigured } from './firebase';
 import { doc, onSnapshot, setDoc, deleteDoc, increment, collection, query, where, getDocs } from "firebase/firestore";
 
 const App: React.FC = () => {
-  const { user, loginWithFacebook, logout, loading: authLoading } = useAuth();
+  const { user, isAdmin, loginWithFacebook, loginWithGoogle, logout, loading: authLoading } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
-  const [location, setLocation] = useState('Albuquerque, New Mexico');
+  const [location] = useState('Albuquerque, New Mexico');
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<SearchResult | null>(null);
   const [globalScores, setGlobalScores] = useState<Record<string, number>>({});
@@ -24,7 +26,9 @@ const App: React.FC = () => {
   const [isSeeding, setIsSeeding] = useState(false);
   const [seedingStatus, setSeedingStatus] = useState("");
   const [isSuggestModalOpen, setIsSuggestModalOpen] = useState(false);
-  const [view, setView] = useState<'dashboard' | 'list'>('dashboard');
+  const [isAdminLoginOpen, setIsAdminLoginOpen] = useState(false);
+  const [view, setView] = useState<'dashboard' | 'list' | 'admin'>('dashboard');
+  const [pendingSuggestions, setPendingSuggestions] = useState<Restaurant[]>([]);
 
   // Voting state
   const [userVotes, setUserVotes] = useState<UserVoteRecord>(() => {
@@ -232,9 +236,7 @@ const App: React.FC = () => {
 
   const handleVote = async (id: string, category: string, type: 'top' | 'runnerUp') => {
     if (!user) {
-      if (confirm("Please log in with Facebook to cast your vote!")) {
-        loginWithFacebook();
-      }
+      loginWithFacebook();
       return;
     }
 
@@ -288,9 +290,7 @@ const App: React.FC = () => {
 
   const handleVoteOverall = async (id: string) => {
     if (!user) {
-      if (confirm("Please log in with Facebook to cast your vote!")) {
-        loginWithFacebook();
-      }
+      loginWithFacebook();
       return;
     }
 
@@ -383,235 +383,362 @@ const App: React.FC = () => {
   // Top 10 restaurants overall for "Best This Week" widget
   const topRestaurants = useMemo(() => {
     if (!data?.restaurants) return [];
-    const query = searchQuery.toLowerCase().trim();
     return [...data.restaurants]
-      .filter(r => !query || r.name.toLowerCase().includes(query) || r.category.toLowerCase().includes(query))
       .sort((a, b) => getRestaurantPoints(b) - getRestaurantPoints(a))
       .slice(0, 10);
-  }, [data, globalScores, userVotes, searchQuery]);
+  }, [data, userVotes, globalScores]);
+
+  const fetchSuggestions = useCallback(async () => {
+    if (!isAdmin) return;
+    try {
+      const suggestions = await getPendingSuggestions();
+      setPendingSuggestions(suggestions);
+    } catch (e) {
+      console.error("Failed to fetch suggestions", e);
+    }
+  }, [isAdmin]);
+
+  useEffect(() => {
+    if (view === 'admin') {
+      fetchSuggestions();
+    }
+  }, [view, fetchSuggestions]);
+
+  const handleApproveSuggestion = async (restaurant: Restaurant) => {
+    setLoading(true);
+    try {
+      await approveSuggestion(restaurant);
+      await fetchSuggestions();
+      // Refresh main data
+      const saved = await getSavedRestaurants();
+      const cats = new Set<string>();
+      saved.forEach(r => cats.add(r.category));
+      setData({
+        restaurants: saved,
+        categories: Array.from(cats).sort()
+      });
+    } catch (e) {
+      console.error("Approval failed", e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRejectSuggestion = async (id: string) => {
+    try {
+      await rejectSuggestion(id);
+      await fetchSuggestions();
+    } catch (e) {
+      console.error("Rejection failed", e);
+    }
+  };
+
+  const handleCleanup = async () => {
+    if (!data) return;
+    setLoading(true);
+    try {
+      const toDelete = data.restaurants.filter(r =>
+        !r.address.toLowerCase().includes("albuquerque") &&
+        !r.address.toLowerCase().includes("abq")
+      );
+
+      if (toDelete.length === 0) {
+        alert("Database is already clean! All restaurants are in Albuquerque.");
+        return;
+      }
+
+      if (confirm(`Found ${toDelete.length} restaurants not in ABQ. Delete them?`)) {
+        for (const r of toDelete) {
+          await deleteRestaurant(r.id);
+        }
+        // Refresh
+        const saved = await getSavedRestaurants();
+        const cats = new Set<string>();
+        saved.forEach(r => cats.add(r.category));
+        setData({
+          restaurants: saved,
+          categories: Array.from(cats).sort()
+        });
+        alert(`Cleaned up ${toDelete.length} entries.`);
+      }
+    } catch (e) {
+      console.error("Cleanup failed", e);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <div className="min-h-screen pb-40 relative">
-      {/* Background Map Layer - Increased Opacity for "Opaque" look */}
-      <div className="fixed inset-0 pointer-events-none z-[-1] overflow-hidden">
-        <div className="absolute inset-0 bg-[#faf9f6]/70"></div>
-        <img
-          src="https://images.unsplash.com/photo-1548345680-f5475ee511d7?q=80&w=2000&auto=format&fit=crop"
-          className="w-full h-full object-cover grayscale opacity-[0.12] brightness-110 contrast-150"
-          alt="Albuquerque Map Background"
-        />
-      </div>
+    <div className="min-h-screen bg-slate-50 font-sans select-none relative">
+      <div className="bg-mesh" />
 
-      <header className="bg-white/80 backdrop-blur-md border-b border-orange-100 sticky top-0 z-30 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 h-20 flex items-center gap-6">
-          <div className="flex items-center gap-3 shrink-0">
-            <div className="w-10 h-10 bg-orange-600 rounded-xl flex items-center justify-center rotate-3 shadow-lg">
-              <span className="text-white font-black italic text-xl">PW</span>
-            </div>
-            <div className="hidden lg:block">
-              <h1 className="text-xl font-black tracking-tighter text-slate-900 leading-none">Plate <span className="text-orange-600">Watchers</span></h1>
-              <div className="flex items-center gap-1.5 mt-1">
-                <div className={`w-1.5 h-1.5 rounded-full ${user ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`}></div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                  {user ? `Logged in as ${user.displayName?.split(' ')[0]}` : 'Guest Mode'}
-                </p>
+      {/* Header */}
+      <header className="fixed top-0 left-0 right-0 bg-white/70 backdrop-blur-2xl z-50 border-b border-slate-100/50">
+        <div className="max-w-7xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-between gap-6">
+            <div className="flex items-center gap-8 shrink-0">
+              <h1 className="text-2xl font-black text-slate-900 tracking-tight cursor-pointer font-display" onClick={() => { setView('dashboard'); setSelectedCategories([]); setSearchQuery(''); }}>
+                PLATE<span className="text-orange-600">WATCHERS</span>
+              </h1>
+
+              <div className="hidden md:flex bg-slate-100/80 p-1 rounded-2xl">
+                <button
+                  onClick={() => setView('dashboard')}
+                  className={`px-6 py-2 rounded-xl text-sm font-black uppercase tracking-widest transition-all ${view === 'dashboard' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                >
+                  Leaderboards
+                </button>
+                <button
+                  onClick={() => setView('list')}
+                  className={`px-6 py-2 rounded-xl text-sm font-black uppercase tracking-widest transition-all ${view === 'list' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                >
+                  All Spots
+                </button>
               </div>
             </div>
-          </div>
 
-          <form onSubmit={handleSearch} className="flex-1 flex items-center bg-white/60 border border-slate-200 rounded-2xl overflow-hidden group focus-within:ring-4 focus-within:ring-orange-100 transition-all">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Find (Sushi, burgers...)"
-              className="w-full pl-6 pr-4 py-3 bg-transparent text-sm font-medium focus:outline-none"
-            />
-            <div className="w-[1px] h-6 bg-slate-200"></div>
-            <input
-              type="text"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              placeholder="Location"
-              className="w-full pl-6 pr-4 py-3 bg-transparent text-sm font-medium focus:outline-none"
-            />
-            <button type="submit" className="bg-orange-600 text-white px-6 py-3 font-black text-xs uppercase hover:bg-orange-700 transition-colors">Go</button>
-          </form>
-
-          <div className="hidden sm:flex items-center gap-4 bg-white/60 border border-slate-100 rounded-2xl px-4 py-2 shrink-0">
-            <button
-              onClick={() => setIsSuggestModalOpen(true)}
-              className="text-xs font-bold text-emerald-600 uppercase hover:underline mr-2"
-            >
-              + Suggest
-            </button>
-            {user?.email === 'analoguepro@gmail.com' && (
-              <>
-                <div className="h-6 w-[1px] bg-slate-200"></div>
-                <button onClick={handleSeed} disabled={loading || isSeeding} className="text-xs font-bold text-orange-600 uppercase hover:underline disabled:opacity-50 mx-2">
-                  {isSeeding ? 'Hydrating...' : 'Hydrate DB'}
-                </button>
-              </>
+            {/* Header Search - Restored Position */}
+            {view !== 'admin' && (
+              <div className="flex-1 max-w-xl hidden md:block">
+                <form onSubmit={(e) => { e.preventDefault(); handleSearch(); }} className="relative">
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search BBQ, Pizza, Burgers..."
+                    className="w-full pl-12 pr-6 py-2.5 bg-slate-100 border-transparent rounded-2xl focus:bg-white focus:ring-4 focus:ring-orange-100 focus:border-orange-400 outline-none transition-all font-medium text-sm"
+                  />
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg">🔍</span>
+                </form>
+              </div>
             )}
-            <div className="h-6 w-[1px] bg-slate-200"></div>
-            <button
-              onClick={() => setView(view === 'dashboard' ? 'list' : 'dashboard')}
-              className="text-xs font-bold text-slate-500 uppercase hover:text-slate-800 mx-2"
-            >
-              {view === 'dashboard' ? 'View All' : 'Dashboard'}
-            </button>
-            <div className="text-center">
-              <div className="text-xs font-black text-slate-800">{activeVotesCount}</div>
-              <div className="text-[9px] font-bold text-slate-400 uppercase">Votes</div>
-            </div>
-            <div className="h-6 w-[1px] bg-slate-200"></div>
 
-            {user ? (
-              <div className="flex items-center gap-3">
-                {user.photoURL && (
-                  <img src={user.photoURL} alt="User" className="w-8 h-8 rounded-full border-2 border-orange-100 shadow-sm" />
-                )}
-                <div className="flex flex-col items-end">
-                  <button onClick={logout} className="text-[10px] font-black uppercase text-slate-400 hover:text-orange-600 transition-colors leading-none mb-1">Logout</button>
+            <div className="flex items-center gap-4 shrink-0">
+              {/* Albuquerque Badge */}
+              <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-orange-50 border border-orange-100 rounded-lg text-orange-600 font-bold text-[10px] uppercase tracking-wider">
+                <span className="w-1.5 h-1.5 bg-orange-500 rounded-full animate-pulse"></span>
+                ABQ Only
+              </div>
+
+              {isAdmin && (
+                <button
+                  onClick={() => setView('admin')}
+                  className={`p-2 rounded-xl transition-all ${view === 'admin' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                  title="Admin Console"
+                >
+                  ⚙️
+                </button>
+              )}
+
+              <button
+                onClick={() => setIsSuggestModalOpen(true)}
+                className="bg-orange-600 text-white px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-orange-700 transition-all shadow-lg active:scale-95"
+              >
+                + Suggest
+              </button>
+
+              <div className="w-[1px] h-6 bg-slate-200 ml-2"></div>
+
+              {user ? (
+                <div className="flex items-center gap-3">
+                  <div className="text-right hidden sm:block">
+                    <div className="text-xs font-black text-slate-900 leading-tight">{user.displayName}</div>
+                    <button onClick={logout} className="text-[9px] font-bold text-slate-400 hover:text-orange-600 uppercase tracking-widest transition-colors">Sign Out</button>
+                  </div>
+                  {user.photoURL && <img src={user.photoURL} alt="" className="w-9 h-9 rounded-full border-2 border-white shadow-md" />}
+                </div>
+              ) : (
+                <div className="flex items-center gap-3">
                   <button
-                    onClick={async () => {
-                      if (window.confirm("Are you sure you want to delete all your voting data? This cannot be undone.")) {
-                        try {
-                          await deleteUserVotes(user.uid);
-                          await logout();
-                          alert("Your data has been deleted and you have been logged out.");
-                        } catch (e) {
-                          alert("Failed to delete data. Please try again later.");
-                        }
-                      }
-                    }}
-                    className="text-[8px] font-bold uppercase text-red-300 hover:text-red-500 transition-colors leading-none"
+                    onClick={loginWithFacebook}
+                    disabled={authLoading}
+                    className="flex items-center gap-2 bg-[#1877F2] text-white px-4 py-2 rounded-xl font-bold text-xs hover:opacity-90 transition-all"
                   >
-                    Delete My Data
+                    <span>Login with facebook</span>
+                  </button>
+                  <button
+                    onClick={() => setIsAdminLoginOpen(true)}
+                    className="p-2 text-slate-400 hover:text-slate-900 transition-colors"
+                    title="Staff Login"
+                  >
+                    🔑
                   </button>
                 </div>
-              </div>
-            ) : (
-              <button
-                onClick={loginWithFacebook}
-                disabled={authLoading}
-                className="bg-[#1877F2] text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-[#166fe5] transition-all shadow-md active:scale-95 disabled:opacity-50"
-              >
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" /></svg>
-                Facebook Login
-              </button>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </header>
 
-      {view === 'list' && data ? (
-        <AllRestaurantsView
-          restaurants={data.restaurants}
-          onBack={() => setView('dashboard')}
-        />
-      ) : (
-        <main className="max-w-7xl mx-auto px-4 mt-12">
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
-            <div className="max-w-2xl">
-              <h2 className="text-5xl font-black text-slate-900 tracking-tighter mb-4 italic leading-tight">
-                {isGlobalLive ? 'Community' : 'Your Personal'} <span className="text-orange-600">Rankings</span>
-              </h2>
-              <p className="text-slate-500 text-xl font-medium">
-                {isGlobalLive
-                  ? `Real-time shared leaderboard for the best of ${location}.`
-                  : `Ranking the best local gems in ${location}. Set up Firebase for global sync.`}
-              </p>
-            </div>
-          </div>
-
-          {/* Best This Week Widget - Compact */}
-          {!loading && !error && topRestaurants.length > 0 && (
-            <div className="mb-12 bg-white/60 backdrop-blur-md border border-orange-100 rounded-3xl p-6 shadow-sm">
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse"></div>
-                <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest">The Best This Week</h3>
+      {/* Main Content */}
+      <div className="pt-20 pb-40">
+        {view === 'list' ? (
+          <AllRestaurantsView
+            restaurants={data?.restaurants || []}
+            onBack={() => setView('dashboard')}
+          />
+        ) : view === 'admin' ? (
+          <AdminDashboard
+            onBack={() => setView('dashboard')}
+            onSeed={handleSeed}
+            onCleanup={handleCleanup}
+            onApprove={handleApproveSuggestion}
+            onReject={handleRejectSuggestion}
+            suggestions={pendingSuggestions}
+            isSeeding={isSeeding}
+            seedingStatus={seedingStatus}
+            loading={loading}
+          />
+        ) : (
+          <main className="max-w-7xl mx-auto px-6 mt-16">
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-10 mb-16">
+              <div className="max-w-3xl">
+                <h2 className="text-7xl font-black text-slate-900 tracking-tight mb-6 leading-[0.9] font-display">
+                  {isGlobalLive ? 'Community' : 'Your Personal'} <br />
+                  <span className="text-orange-600 italic">Rankings</span>
+                </h2>
+                <p className="text-slate-500 text-xl font-medium max-w-xl">
+                  {isGlobalLive
+                    ? `Real-time shared leaderboard for the best of Albuquerque.`
+                    : `Ranking the best local gems in Albuquerque. Set up Firebase for global sync.`}
+                </p>
               </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                {topRestaurants.slice(0, 5).map((r, i) => (
-                  <div key={r.id} className="group relative bg-white border border-slate-100 rounded-xl p-3 hover:shadow-md transition-all cursor-default">
-                    <div className="absolute -top-3 -left-2 w-6 h-6 bg-slate-900 text-white rounded-lg flex items-center justify-center font-black text-xs shadow-lg transform -rotate-6 z-10">
-                      #{i + 1}
+              {/* Mobile Search - Only visible on small screens */}
+              <div className="w-full md:hidden">
+                <form onSubmit={(e) => { e.preventDefault(); handleSearch(); }} className="relative">
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search BBQ, Pizza, Burgers..."
+                    className="w-full pl-12 pr-6 py-4 bg-white border border-slate-100 rounded-3xl shadow-sm outline-none transition-all font-medium text-lg"
+                  />
+                  <span className="absolute left-5 top-1/2 -translate-y-1/2 text-xl">🔍</span>
+                </form>
+              </div>
+            </div>
+
+            {/* Best This Week Widget - Moved Above Categories */}
+            {!loading && !error && topRestaurants.length > 0 && searchQuery === "" && selectedCategories.length === 0 && (
+              <div className="mb-16 bg-white/60 backdrop-blur-md border border-orange-100 rounded-[32px] p-8 shadow-sm">
+                <div className="flex items-center gap-2 mb-6">
+                  <div className="w-2.5 h-2.5 rounded-full bg-orange-500 animate-pulse"></div>
+                  <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">The Best This Week</h3>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
+                  {topRestaurants.slice(0, 5).map((r, i) => (
+                    <div key={r.id} className="group relative bg-white border border-slate-100 rounded-2xl p-4 hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer">
+                      <div className="absolute -top-3 -left-2 w-8 h-8 bg-slate-900 text-white rounded-xl flex items-center justify-center font-black text-sm shadow-lg transform -rotate-12 z-10 group-hover:rotate-0 transition-transform">
+                        #{i + 1}
+                      </div>
+                      <div className="text-[10px] font-black text-orange-600 uppercase mb-1 tracking-wider">{r.category}</div>
+                      <div className="font-black text-slate-800 leading-tight mb-2 line-clamp-2" title={r.name}>{r.name}</div>
+                      <div className="flex items-center justify-between mt-auto">
+                        <div className="text-xs font-black text-slate-400 uppercase">
+                          {(getRestaurantPoints(r) - Number(r.basePoints)).toLocaleString()} <span className="text-[9px] opacity-60">pts</span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-xs font-bold text-slate-400 uppercase mb-1 truncate">{r.category}</div>
-                    <div className="font-black text-slate-800 leading-tight mb-1 truncate" title={r.name}>{r.name}</div>
-                    <div className="text-xs font-bold text-orange-600">
-                      {(getRestaurantPoints(r) - Number(r.basePoints)).toLocaleString()} <span className="text-[9px] text-orange-400">votes</span>
-                    </div>
-                  </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Category Pills - Moved Below Widget */}
+            {data && data.categories.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-12">
+                <button
+                  onClick={() => setSelectedCategories([])}
+                  className={`px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-widest transition-all ${selectedCategories.length === 0 ? 'bg-orange-600 text-white shadow-lg scale-105' : 'bg-white text-slate-500 border border-slate-100 hover:border-orange-200 hover:text-orange-600'}`}
+                >
+                  All Categories
+                </button>
+                {data.categories.map(cat => (
+                  <button
+                    key={cat}
+                    onClick={() => {
+                      if (selectedCategories.includes(cat)) {
+                        setSelectedCategories(prev => prev.filter(c => c !== cat));
+                      } else {
+                        setSelectedCategories(prev => [...prev, cat]);
+                      }
+                    }}
+                    className={`px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-widest transition-all ${selectedCategories.includes(cat) ? 'bg-slate-900 text-white shadow-lg' : 'bg-white text-slate-500 border border-slate-100 hover:border-slate-300 hover:text-slate-900'}`}
+                  >
+                    {cat}
+                  </button>
                 ))}
               </div>
-            </div>
-          )}
+            )}
 
-          {loading ? (
-            <div className="flex flex-col items-center justify-center py-40">
-              <div className="w-24 h-24 border-8 border-orange-100 border-t-orange-600 rounded-full animate-spin mb-8"></div>
-              <p className="text-slate-400 font-black uppercase tracking-[0.3em] text-sm animate-pulse text-center">
-                {isSeeding ? seedingStatus : "Finding the best spots..."}
-              </p>
-            </div>
-          ) : error ? (
-            <div className="py-20 text-center">
-              {/* Error UI */}
-              <div className="text-orange-600 font-black text-4xl mb-4">Oops!</div>
-              <p className="text-slate-500 font-medium">{error.message}</p>
-              <button onClick={() => handleSearch()} className="mt-6 bg-slate-900 text-white px-8 py-3 rounded-xl font-bold">Try Again</button>
-            </div>
-          ) : Object.keys(groupedRestaurants).length === 0 ? (
-            <div className="py-20 text-center">
-              <div className="text-slate-300 font-black text-6xl mb-4">No Matches</div>
-              <p className="text-slate-500 font-medium mb-8">
-                {searchQuery
-                  ? `No local results for "${searchQuery}". Try a different term or search online.`
-                  : "No restaurants found in the database. Click Hydrate."
-                }
-              </p>
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-                {searchQuery && (
-                  <button onClick={() => handleSearch()} className="bg-orange-600 text-white px-8 py-4 rounded-xl font-black text-lg shadow-xl hover:bg-orange-700 transition-all">Search Online for "{searchQuery}"</button>
-                )}
-                {user?.email === 'analoguepro@gmail.com' && (
-                  <button onClick={handleSeed} className="bg-slate-900 text-white px-8 py-4 rounded-xl font-black text-lg shadow-xl hover:bg-slate-800 transition-all">Hydrate Full Database</button>
-                )}
+            {loading ? (
+              <div className="flex flex-col items-center justify-center py-40">
+                <div className="w-24 h-24 border-8 border-orange-100 border-t-orange-600 rounded-full animate-spin mb-8"></div>
+                <p className="text-slate-400 font-black uppercase tracking-[0.3em] text-sm animate-pulse text-center">
+                  {isSeeding ? seedingStatus : "Finding the best spots..."}
+                </p>
               </div>
-            </div>
-          ) : (
-            <div className="space-y-24">
-              {filteredCategoryKeys.map(category => (
-                <section key={category}>
-                  <h3 className="text-3xl font-black text-slate-900 mb-8 px-8 py-2 bg-white/90 border border-slate-100 rounded-full inline-block shadow-sm backdrop-blur-sm">{category}</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                    {groupedRestaurants[category].map((restaurant) => {
-                      const catVote = userVotes.categoryVotes[category];
-                      return (
-                        <RestaurantCard
-                          key={restaurant.id}
-                          restaurant={restaurant}
-                          isTopChoice={catVote?.topId === restaurant.id}
-                          isRunnerUp={catVote?.runnerUpId === restaurant.id}
-                          isOverallTopPick={userVotes.overallTopPick === restaurant.id}
-                          onVote={handleVote}
-                          onVoteOverall={handleVoteOverall}
-                          userScore={getRestaurantPoints(restaurant) - Number(restaurant.basePoints) - Number(globalScores[restaurant.id] || 0)}
-                          globalCommunityPoints={isGlobalLive ? Number(globalScores[restaurant.id] || 0) : undefined}
-                          searchTerm={searchQuery}
-                        />
-                      );
-                    })}
-                  </div>
-                </section>
-              ))}
-            </div>
-          )}
-        </main>
-      )}
+            ) : error ? (
+              <div className="py-20 text-center">
+                <div className="text-orange-600 font-black text-4xl mb-4 text-gradient">Oops!</div>
+                <p className="text-slate-500 font-medium">{error.message}</p>
+                <button onClick={() => handleSearch()} className="mt-6 bg-slate-900 text-white px-8 py-3 rounded-xl font-bold hover:bg-orange-600 transition-all">Try Again</button>
+              </div>
+            ) : Object.keys(groupedRestaurants).length === 0 ? (
+              <div className="py-20 text-center">
+                <div className="text-slate-300 font-black text-6xl mb-4">No Matches</div>
+                <p className="text-slate-500 font-medium mb-8">
+                  {searchQuery
+                    ? `No local results for "${searchQuery}". Try a different term or search online.`
+                    : "No restaurants found in the database. Click Hydrate."
+                  }
+                </p>
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                  {searchQuery && (
+                    <button onClick={() => handleSearch()} className="bg-orange-600 text-white px-8 py-4 rounded-xl font-black text-lg shadow-xl hover:bg-orange-700 transition-all active:scale-95">Search Online for "{searchQuery}"</button>
+                  )}
+                  {isAdmin && (
+                    <button onClick={() => setView('admin')} className="bg-slate-900 text-white px-8 py-4 rounded-xl font-black text-lg shadow-xl hover:bg-slate-800 transition-all active:scale-95">Go to Admin Console</button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-24">
+                {filteredCategoryKeys.map(category => (
+                  <section key={category}>
+                    <div className="flex items-baseline gap-4 mb-10">
+                      <h3 className="text-4xl font-black text-slate-900 tracking-tighter">{category}</h3>
+                      <div className="h-[2px] flex-1 bg-slate-100 rounded-full"></div>
+                      <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">{groupedRestaurants[category].length} Spots</span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
+                      {groupedRestaurants[category].map((restaurant) => {
+                        const catVote = userVotes.categoryVotes[category];
+                        return (
+                          <RestaurantCard
+                            key={restaurant.id}
+                            restaurant={restaurant}
+                            isTopChoice={catVote?.topId === restaurant.id}
+                            isRunnerUp={catVote?.runnerUpId === restaurant.id}
+                            isOverallTopPick={userVotes.overallTopPick === restaurant.id}
+                            onVote={handleVote}
+                            onVoteOverall={handleVoteOverall}
+                            userScore={getRestaurantPoints(restaurant) - Number(restaurant.basePoints) - Number(globalScores[restaurant.id] || 0)}
+                            globalCommunityPoints={isGlobalLive ? Number(globalScores[restaurant.id] || 0) : undefined}
+                            searchTerm={searchQuery}
+                          />
+                        );
+                      })}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            )}
+          </main>
+        )}
+      </div>
 
       <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-40 w-full max-w-3xl px-6">
         <div className="bg-slate-900/90 backdrop-blur-xl text-white rounded-[32px] p-6 shadow-2xl flex justify-between items-center border border-white/10 ring-1 ring-black/5">
@@ -627,32 +754,20 @@ const App: React.FC = () => {
         </div>
       </div>
 
+      {/* Admin Login Modal */}
+      <AdminLoginModal
+        isOpen={isAdminLoginOpen}
+        onClose={() => setIsAdminLoginOpen(false)}
+      />
+
       {/* Suggest Restaurant Modal */}
       <SuggestModal
         isOpen={isSuggestModalOpen}
         onClose={() => setIsSuggestModalOpen(false)}
         location={location}
         existingRestaurants={data?.restaurants || []}
-        onSuccess={(newRestaurant) => {
-          // Add the new restaurant to the local state
-          setData(prev => {
-            if (!prev) {
-              return {
-                restaurants: [newRestaurant],
-                categories: [newRestaurant.category]
-              };
-            }
-            // Check if already exists
-            if (prev.restaurants.find(r => r.id === newRestaurant.id)) {
-              return prev;
-            }
-            const newCats = new Set(prev.categories);
-            newCats.add(newRestaurant.category);
-            return {
-              restaurants: [...prev.restaurants, newRestaurant],
-              categories: Array.from(newCats).sort()
-            };
-          });
+        onSuccess={() => {
+          // Success is handled by the "Shared" message in the modal
         }}
       />
     </div>

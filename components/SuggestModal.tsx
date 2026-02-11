@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { validateRestaurant, ValidationResult } from '../services/geminiService';
-import { saveRestaurant } from '../services/restaurantService';
+import { saveSuggestion } from '../services/restaurantService';
 import { Restaurant } from '../types';
 
 interface SuggestModalProps {
@@ -16,6 +16,7 @@ const SuggestModal: React.FC<SuggestModalProps> = ({ isOpen, onClose, location, 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState(false);
+    const [lastSuggestedName, setLastSuggestedName] = useState('');
 
     // Rate limiting: max 5 submissions per hour
     const checkRateLimit = (): boolean => {
@@ -76,10 +77,11 @@ const SuggestModal: React.FC<SuggestModalProps> = ({ isOpen, onClose, location, 
                 return;
             }
 
-            // Save to Firestore
-            await saveRestaurant(result.restaurant);
+            // Save to Suggestions collection instead of main restaurants
+            await saveSuggestion(result.restaurant);
 
             setSuccess(true);
+            setLastSuggestedName(result.restaurant.name);
             setRestaurantName('');
 
             // Notify parent of success
@@ -130,8 +132,8 @@ const SuggestModal: React.FC<SuggestModalProps> = ({ isOpen, onClose, location, 
                 {success ? (
                     <div className="text-center py-8">
                         <div className="text-6xl mb-4">🎉</div>
-                        <p className="text-xl font-bold text-emerald-600">Restaurant Added!</p>
-                        <p className="text-slate-500 text-sm mt-2">It now appears on the leaderboard with 100 base points.</p>
+                        <p className="text-xl font-bold text-orange-600">Suggestion Shared!</p>
+                        <p className="text-slate-500 text-sm mt-2">Thanks! An admin will review "{lastSuggestedName}" shortly to ensure it's in Albuquerque.</p>
                     </div>
                 ) : (
                     <form onSubmit={handleSubmit}>
