@@ -9,15 +9,15 @@ const TutorialModal: React.FC<TutorialModalProps> = ({ isOpen, onClose }) => {
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center px-6">
+        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center px-0 sm:px-6">
             <div
                 className="absolute inset-0 bg-slate-900/40 backdrop-blur-md transition-opacity"
                 onClick={onClose}
             />
 
-            <div className="relative bg-white rounded-[32px] shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-100 animate-in fade-in zoom-in duration-300">
+            <div className="relative bg-white rounded-t-[24px] sm:rounded-[32px] shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto overflow-x-hidden border border-slate-100 animate-in fade-in zoom-in duration-300">
                 {/* Header */}
-                <div className="bg-orange-600 px-8 py-10 text-white relative">
+                <div className="bg-orange-600 px-5 py-6 sm:px-8 sm:py-10 text-white relative">
                     <button
                         onClick={onClose}
                         className="absolute top-6 right-6 w-8 h-8 rounded-full bg-white/20 flex items-center justify-center hover:bg-white/30 transition-colors"
@@ -26,18 +26,18 @@ const TutorialModal: React.FC<TutorialModalProps> = ({ isOpen, onClose }) => {
                     </button>
                     <div className="flex items-center gap-3 mb-4">
                         <span className="text-4xl text-white">✨</span>
-                        <h2 className="text-3xl font-black tracking-tight leading-none uppercase">How It Works</h2>
+                        <h2 className="text-2xl sm:text-3xl font-black tracking-tight leading-none uppercase">How It Works</h2>
                     </div>
-                    <p className="text-orange-100 font-medium text-lg leading-relaxed max-w-md">
+                    <p className="text-orange-100 font-medium text-sm sm:text-lg leading-relaxed max-w-md">
                         PlateWatchers is a community-driven ranking of the best spots in Albuquerque. Your vote directly impacts the leaderboard.
                     </p>
                 </div>
 
                 {/* Content */}
-                <div className="p-10 space-y-10">
+                <div className="p-5 sm:p-10 space-y-6 sm:space-y-10">
                     {/* Step 1: Voting */}
-                    <section className="flex gap-6">
-                        <div className="w-12 h-12 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center font-black text-xl shrink-0">1</div>
+                    <section className="flex gap-4 sm:gap-6">
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center font-black text-lg sm:text-xl shrink-0">1</div>
                         <div>
                             <h3 className="text-xl font-black text-slate-900 mb-2 uppercase tracking-tight">Cast Your Ballot</h3>
                             <p className="text-slate-500 font-medium leading-relaxed">
@@ -57,8 +57,8 @@ const TutorialModal: React.FC<TutorialModalProps> = ({ isOpen, onClose }) => {
                     </section>
 
                     {/* Step 2: Ranking */}
-                    <section className="flex gap-6">
-                        <div className="w-12 h-12 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center font-black text-xl shrink-0">2</div>
+                    <section className="flex gap-4 sm:gap-6">
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center font-black text-lg sm:text-xl shrink-0">2</div>
                         <div>
                             <h3 className="text-xl font-black text-slate-900 mb-2 uppercase tracking-tight">Community Ranking</h3>
                             <p className="text-slate-500 font-medium leading-relaxed">
@@ -68,8 +68,8 @@ const TutorialModal: React.FC<TutorialModalProps> = ({ isOpen, onClose }) => {
                     </section>
 
                     {/* Step 3: Global Pick */}
-                    <section className="flex gap-6">
-                        <div className="w-12 h-12 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center font-black text-xl shrink-0">3</div>
+                    <section className="flex gap-4 sm:gap-6">
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center font-black text-lg sm:text-xl shrink-0">3</div>
                         <div>
                             <h3 className="text-xl font-black text-slate-900 mb-2 uppercase tracking-tight">The "Overall Top Pick"</h3>
                             <p className="text-slate-500 font-medium leading-relaxed">

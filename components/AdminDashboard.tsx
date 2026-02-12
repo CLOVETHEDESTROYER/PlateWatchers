@@ -37,19 +37,19 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         >
                             ← Back
                         </button>
-                        <h1 className="text-3xl font-black text-slate-900 ml-4">Admin Console</h1>
+                        <h1 className="text-xl sm:text-3xl font-black text-slate-900 ml-2 sm:ml-4">Admin Console</h1>
                     </div>
 
                     <div className="flex bg-slate-100 p-1 rounded-2xl">
                         <button
                             onClick={() => setActiveTab('approvals')}
-                            className={`px-6 py-2 rounded-xl text-sm font-black uppercase tracking-widest transition-all ${activeTab === 'approvals' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                            className={`px-3 py-2 sm:px-6 sm:py-2 rounded-xl text-[10px] sm:text-sm font-black uppercase tracking-widest transition-all ${activeTab === 'approvals' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
                         >
                             Approvals {suggestions.length > 0 && <span className="ml-2 bg-orange-600 text-white px-2 py-0.5 rounded-full text-[10px]">{suggestions.length}</span>}
                         </button>
                         <button
                             onClick={() => setActiveTab('tools')}
-                            className={`px-6 py-2 rounded-xl text-sm font-black uppercase tracking-widest transition-all ${activeTab === 'tools' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                            className={`px-3 py-2 sm:px-6 sm:py-2 rounded-xl text-[10px] sm:text-sm font-black uppercase tracking-widest transition-all ${activeTab === 'tools' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
                         >
                             Tools
                         </button>
@@ -59,7 +59,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 {activeTab === 'tools' ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                         {/* Database Management Card */}
-                        <div className="bg-white/80 backdrop-blur-md border border-slate-200 rounded-3xl p-8 shadow-sm">
+                        <div className="bg-white/80 backdrop-blur-md border border-slate-200 rounded-2xl sm:rounded-3xl p-4 sm:p-8 shadow-sm">
                             <div className="flex items-center gap-4 mb-6">
                                 <div className="w-12 h-12 bg-orange-100 rounded-2xl flex items-center justify-center text-orange-600 text-2xl">
                                     🗄️
@@ -108,7 +108,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </div>
 
                         {/* System Info Card */}
-                        <div className="bg-white/80 backdrop-blur-md border border-slate-200 rounded-3xl p-8 shadow-sm">
+                        <div className="bg-white/80 backdrop-blur-md border border-slate-200 rounded-2xl sm:rounded-3xl p-4 sm:p-8 shadow-sm">
                             <div className="flex items-center gap-4 mb-6">
                                 <div className="w-12 h-12 bg-blue-100 rounded-2xl flex items-center justify-center text-blue-600 text-2xl">
                                     🛠️
@@ -144,7 +144,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
                 ) : (
                     <div className="space-y-6">
-                        <div className="bg-white/80 backdrop-blur-md border border-slate-200 rounded-3xl p-8 shadow-sm">
+                        <div className="bg-white/80 backdrop-blur-md border border-slate-200 rounded-2xl sm:rounded-3xl p-4 sm:p-8 shadow-sm">
                             <h2 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-3">
                                 <span className="text-2xl">📥</span> Pending Suggestions
                             </h2>

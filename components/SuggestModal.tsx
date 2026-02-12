@@ -112,7 +112,7 @@ const SuggestModal: React.FC<SuggestModalProps> = ({ isOpen, onClose, location, 
 
     return (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8 relative">
+            <div className="bg-white rounded-t-[24px] sm:rounded-3xl shadow-2xl max-w-md w-full p-5 sm:p-8 relative">
                 {/* Close button */}
                 <button
                     onClick={handleClose}
