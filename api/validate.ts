@@ -58,19 +58,16 @@ export default async function handler(req: any, res: any) {
 
     if (!apiKey) {
         console.error("❌ GEMINI_API_KEY is missing from environment variables.");
-        return res.status(500).json({ error: 'GEMINI_API_KEY not configured' });
+        return res.status(500).json({ error: 'GEMINI_API_KEY not configured in Vercel settings.' });
     }
 
+    // Log key presence for debugging (first 4 chars only for security)
+    console.log(`🔑 Key check: ${apiKey.substring(0, 4)}... (Total length: ${apiKey.length})`);
+
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({
-        model: "gemini-1.5-flash",
-        tools: [
-            { googleSearchRetrieval: {} } as any
-        ],
-    });
 
     try {
-        console.log(`🔍 Validating restaurant: ${restaurantName} in ${location}`);
+        console.log(`🔍 Validating restaurant: "${restaurantName}" in "${location}"`);
 
         const prompt = `Verify if "${restaurantName}" is a REAL, CURRENTLY OPERATING restaurant, cafe, or similar food establishment in ${location}.
 
@@ -97,9 +94,25 @@ If you cannot find an EXACT match on Google Maps, if it's permanently closed, or
 
 DO NOT include any text outside the JSON. Use DOUBLE QUOTES only.`;
 
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        const text = response.text();
+        // Attempt 1: With Google Search Tool
+        let text = "";
+        try {
+            console.log("🛠️ Attempting validation WITH Google Search tool...");
+            const modelWithTools = genAI.getGenerativeModel({
+                model: "gemini-1.5-flash",
+                tools: [{ googleSearchRetrieval: {} } as any],
+            });
+            const result = await modelWithTools.generateContent(prompt);
+            text = result.response.text();
+            console.log("✅ Tool Success.");
+        } catch (toolError: any) {
+            console.warn("⚠️ Google Search tool failed, falling back to basic model:", toolError.message);
+            // Attempt 2: Fallback to basic model without tools
+            const basicModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+            const result = await basicModel.generateContent(prompt);
+            text = result.response.text();
+            console.log("✅ Basic Fallback Success.");
+        }
 
         console.log("📄 AI Response:", text);
 
@@ -136,10 +149,19 @@ DO NOT include any text outside the JSON. Use DOUBLE QUOTES only.`;
             submittedAt: Date.now(),
         };
 
-        res.status(200).json({ valid: true, restaurant });
+        return res.status(200).json({ valid: true, restaurant });
 
     } catch (error: any) {
-        console.error("❌ Validation Error in Serverless Function:", error);
-        res.status(500).json({ valid: false, error: "Failed to validate restaurant. Internal server error." });
+        console.error("❌ Fatal Validation Error in Serverless Function:", {
+            message: error.message,
+            stack: error.stack,
+            status: error.status,
+            code: error.code
+        });
+        return res.status(500).json({
+            valid: false,
+            error: "Failed to validate restaurant. Internal server error.",
+            details: error.message
+        });
     }
 }

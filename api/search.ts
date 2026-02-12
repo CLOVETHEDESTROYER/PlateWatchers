@@ -77,8 +77,10 @@ export default async function handler(req: any, res: any) {
 
     if (!apiKey) {
         console.error("❌ GEMINI_API_KEY is missing.");
-        return res.status(500).json({ error: 'GEMINI_API_KEY not configured' });
+        return res.status(500).json({ error: 'GEMINI_API_KEY not configured in Vercel settings.' });
     }
+
+    console.log(`🔑 Key check: ${apiKey.substring(0, 4)}... (Total length: ${apiKey.length})`);
 
     const genAI = new GoogleGenerativeAI(apiKey);
     let attempt = 0;
@@ -86,7 +88,7 @@ export default async function handler(req: any, res: any) {
     const executeSearch = async (): Promise<any> => {
         try {
             const searchTerm = query?.trim() || "the best local food and hidden gems";
-            console.log(`🔍 AI Search Attempt ${attempt + 1}: ${searchTerm} in ${location}`);
+            console.log(`🔍 AI Search Attempt ${attempt + 1}: "${searchTerm}" in "${location}"`);
 
             const prompt = `Search for "${searchTerm}" in ${location}.
       CRITICAL: Only include restaurants physically located in Albuquerque, New Mexico. 
@@ -110,16 +112,23 @@ export default async function handler(req: any, res: any) {
       DO NOT use backticks for strings. DO NOT include any text outside the JSON array.
       Verify activity and address via Google Search.`;
 
-            const model = genAI.getGenerativeModel({
-                model: "gemini-1.5-flash",
-                tools: [
-                    { googleSearchRetrieval: {} } as any
-                ],
-            });
-
-            const result = await model.generateContent(prompt);
-            const response = await result.response;
-            const text = response.text();
+            let text = "";
+            try {
+                console.log("🛠️ Attempting search WITH Google Search tool...");
+                const modelWithTools = genAI.getGenerativeModel({
+                    model: "gemini-1.5-flash",
+                    tools: [{ googleSearchRetrieval: {} } as any],
+                });
+                const result = await modelWithTools.generateContent(prompt);
+                text = result.response.text();
+                console.log("✅ Tool Success.");
+            } catch (toolError: any) {
+                console.warn("⚠️ Google Search tool failed, falling back to basic model:", toolError.message);
+                const basicModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+                const result = await basicModel.generateContent(prompt);
+                text = result.response.text();
+                console.log("✅ Basic Fallback Success.");
+            }
 
             console.log(`📄 AI Response (Search): ${text.substring(0, 500)}...`);
             const aiRestaurants = extractJson(text);
@@ -158,7 +167,10 @@ export default async function handler(req: any, res: any) {
                 categories: Array.from(categoriesSet).sort()
             };
         } catch (error: any) {
-            console.error(`❌ Search Attempt ${attempt + 1} Failed:`, error);
+            console.error(`❌ Search Attempt ${attempt + 1} Fatal Error:`, {
+                message: error.message,
+                stack: error.stack
+            });
             if (attempt < MAX_RETRIES) {
                 attempt++;
                 const backoff = INITIAL_BACKOFF * Math.pow(2, attempt - 1);
@@ -174,6 +186,9 @@ export default async function handler(req: any, res: any) {
         const result = await executeSearch();
         res.status(200).json(result);
     } catch (error: any) {
-        res.status(500).json({ error: error.message || 'AI Search failed' });
+        res.status(500).json({
+            error: error.message || 'AI Search failed',
+            details: error.stack
+        });
     }
 }
