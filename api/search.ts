@@ -112,22 +112,30 @@ export default async function handler(req: any, res: any) {
       DO NOT use backticks for strings. DO NOT include any text outside the JSON array.
       Verify activity and address via Google Search.`;
 
+            // Attempt 1: With Google Search Tool (Experimental - uses v1beta)
             let text = "";
             try {
-                console.log("🛠️ Attempting search WITH Google Search tool...");
-                const modelWithTools = genAI.getGenerativeModel({
+                console.log("🛠️ Attempting search WITH Google Search tool (v1beta)...");
+                const genAIBeta = new GoogleGenerativeAI(apiKey);
+                const modelWithTools = genAIBeta.getGenerativeModel({
                     model: "gemini-1.5-flash",
                     tools: [{ googleSearchRetrieval: {} } as any],
-                });
+                }, { apiVersion: 'v1beta' });
+
                 const result = await modelWithTools.generateContent(prompt);
                 text = result.response.text();
                 console.log("✅ Tool Success.");
             } catch (toolError: any) {
-                console.warn("⚠️ Google Search tool failed, falling back to basic model:", toolError.message);
-                const basicModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+                console.warn("⚠️ Google Search tool failed or not supported, falling back to STABLE v1 model:", toolError.message);
+                // Attempt 2: Fallback to STABLE basic model without tools
+                const genAIStable = new GoogleGenerativeAI(apiKey);
+                const basicModel = genAIStable.getGenerativeModel({
+                    model: "gemini-1.5-flash"
+                }, { apiVersion: 'v1' });
+
                 const result = await basicModel.generateContent(prompt);
                 text = result.response.text();
-                console.log("✅ Basic Fallback Success.");
+                console.log("✅ Stable Fallback Success.");
             }
 
             console.log(`📄 AI Response (Search): ${text.substring(0, 500)}...`);
