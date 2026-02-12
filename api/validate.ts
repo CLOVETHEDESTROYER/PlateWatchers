@@ -100,7 +100,7 @@ DO NOT include any text outside the JSON. Use DOUBLE QUOTES only.`;
             console.log("🛠️ Attempting validation WITH Google Search tool (v1beta)...");
             const genAIBeta = new GoogleGenerativeAI(apiKey);
             const modelWithTools = genAIBeta.getGenerativeModel({
-                model: "gemini-1.5-flash",
+                model: "gemini-2.5-flash",
                 tools: [{ googleSearchRetrieval: {} } as any],
             }, { apiVersion: 'v1beta' });
 
@@ -112,7 +112,7 @@ DO NOT include any text outside the JSON. Use DOUBLE QUOTES only.`;
             // Attempt 2: Fallback to STABLE basic model without tools
             const genAIStable = new GoogleGenerativeAI(apiKey);
             const basicModel = genAIStable.getGenerativeModel({
-                model: "gemini-1.5-flash"
+                model: "gemini-2.5-flash"
             }, { apiVersion: 'v1' });
 
             const result = await basicModel.generateContent(prompt);
