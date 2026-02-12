@@ -438,22 +438,47 @@ const App: React.FC = () => {
   const handleCleanup = async () => {
     if (!data) return;
     setLoading(true);
+
+    // Valid ABQ zip codes
+    const ABQ_ZIPS = new Set([
+      '87101', '87102', '87103', '87104', '87105', '87106', '87107', '87108', '87109', '87110',
+      '87111', '87112', '87113', '87114', '87116', '87117', '87119', '87120', '87121', '87122',
+      '87123', '87124', '87125', '87131', '87153', '87154', '87158', '87176', '87181', '87187',
+      '87190', '87191', '87192', '87193', '87194', '87195', '87196', '87197', '87198', '87199'
+    ]);
+
+    // ABQ bounding box
+    const ABQ_BOUNDS = { north: 35.22, south: 34.94, west: -106.82, east: -106.47 };
+
+    const isInABQ = (r: typeof data.restaurants[0]): boolean => {
+      // Check coordinates
+      if (r.latitude && r.longitude) {
+        if (r.latitude >= ABQ_BOUNDS.south && r.latitude <= ABQ_BOUNDS.north &&
+          r.longitude >= ABQ_BOUNDS.west && r.longitude <= ABQ_BOUNDS.east) {
+          return true;
+        }
+      }
+      // Check address text
+      const addr = (r.address || '').toLowerCase();
+      if (addr.includes('albuquerque') || addr.includes('abq')) return true;
+      // Check zip code
+      const zipMatch = addr.match(/\b(\d{5})\b/);
+      if (zipMatch && ABQ_ZIPS.has(zipMatch[1])) return true;
+      return false;
+    };
+
     try {
-      const toDelete = data.restaurants.filter(r =>
-        !r.address.toLowerCase().includes("albuquerque") &&
-        !r.address.toLowerCase().includes("abq")
-      );
+      const toDelete = data.restaurants.filter(r => !isInABQ(r));
 
       if (toDelete.length === 0) {
         alert("Database is already clean! All restaurants are in Albuquerque.");
         return;
       }
 
-      if (confirm(`Found ${toDelete.length} restaurants not in ABQ. Delete them?`)) {
+      if (confirm(`Found ${toDelete.length} restaurants not in ABQ. Delete them?\n\nExamples:\n${toDelete.slice(0, 5).map(r => `• ${r.name} (${r.address})`).join('\n')}`)) {
         for (const r of toDelete) {
           await deleteRestaurant(r.id);
         }
-        // Refresh
         const saved = await getSavedRestaurants();
         const cats = new Set<string>();
         saved.forEach(r => cats.add(r.category));

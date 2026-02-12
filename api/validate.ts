@@ -1,5 +1,35 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
+// Albuquerque bounding box (generous to include edges of metro)
+const ABQ_BOUNDS = {
+    north: 35.22,
+    south: 34.94,
+    west: -106.82,
+    east: -106.47
+};
+
+// Valid Albuquerque zip codes
+const ABQ_ZIPS = new Set([
+    '87101', '87102', '87103', '87104', '87105', '87106', '87107', '87108', '87109', '87110',
+    '87111', '87112', '87113', '87114', '87116', '87117', '87119', '87120', '87121', '87122',
+    '87123', '87124', '87125', '87131', '87153', '87154', '87158', '87176', '87181', '87187',
+    '87190', '87191', '87192', '87193', '87194', '87195', '87196', '87197', '87198', '87199'
+]);
+
+const isInABQ = (lat?: number, lng?: number, address?: string): boolean => {
+    if (lat && lng) {
+        if (lat >= ABQ_BOUNDS.south && lat <= ABQ_BOUNDS.north &&
+            lng >= ABQ_BOUNDS.west && lng <= ABQ_BOUNDS.east) {
+            return true;
+        }
+    }
+    const addr = (address || '').toLowerCase();
+    if (addr.includes('albuquerque') || addr.includes('abq')) return true;
+    const zipMatch = addr.match(/\b(\d{5})\b/);
+    if (zipMatch && ABQ_ZIPS.has(zipMatch[1])) return true;
+    return false;
+};
+
 const safeBtoa = (str: string): string => {
     try {
         const input = String(str || "");
@@ -73,12 +103,12 @@ export default async function handler(req: any, res: any) {
 
 CRITICAL REQUIREMENTS:
 1. The place MUST have a verified listing on Google Maps. 
-2. The place MUST be located strictly within Albuquerque, New Mexico. (No Santa Fe, Rio Rancho, etc.)
-3. The place MUST be open and currently in business.
+2. The place MUST be located strictly within Albuquerque, New Mexico. (No Santa Fe, Rio Rancho, Bernalillo, Los Lunas, etc.)
+3. The place MUST be open and currently in business — NOT permanently closed.
 4. If you find multiple locations, pick the one in Albuquerque.
 
 If the place is VERIFIED on Google Maps and meets ALL criteria, return this EXACT JSON:
-{"valid": true, "name": "Official Name", "googlePlaceType": "place_type_from_list", "address": "Full Street Address", "detail": "Brief description"}
+{"valid": true, "name": "Official Name", "googlePlaceType": "place_type_from_list", "address": "Full Street Address, Albuquerque, NM ZIP", "detail": "Brief description", "latitude": 35.xxxx, "longitude": -106.xxxx}
 
 Category MUST be one of these Google Place Types:
 "american_restaurant", "bakery", "bar", "bar_and_grill", "barbecue_restaurant", 
@@ -89,9 +119,10 @@ Category MUST be one of these Google Place Types:
 "mexican_restaurant", "pizza_restaurant", "seafood_restaurant", "steak_house", 
 "sushi_restaurant", "thai_restaurant", "vegetarian_restaurant", "vietnamese_restaurant"
 
-If you cannot find an EXACT match on Google Maps, if it's permanently closed, or if it's not a food establishment, return:
-{"valid": false, "reason": "Explanation of why it failed (e.g. 'Could not find a Google Maps listing for this name in Albuquerque')"}
+If you cannot find an EXACT match on Google Maps, if it's permanently closed, if it's outside Albuquerque, or if it's not a food establishment, return:
+{"valid": false, "reason": "Explanation of why it failed"}
 
+IMPORTANT: Always include latitude and longitude for valid results.
 DO NOT include any text outside the JSON. Use DOUBLE QUOTES only.`;
 
         // Attempt 1: With Google Search Tool (Experimental - uses v1beta)
@@ -141,6 +172,16 @@ DO NOT include any text outside the JSON. Use DOUBLE QUOTES only.`;
         const idBase = `${parseResult.name}-${location}`.toLowerCase().trim();
         const deterministicId = safeBtoa(idBase).replace(/[^a-zA-Z0-9]/g, '').slice(0, 24);
 
+        // Server-side geo validation — catches AI mistakes
+        const lat = parseFloat(parseResult.latitude) || undefined;
+        const lng = parseFloat(parseResult.longitude) || undefined;
+        const addr = parseResult.address || '';
+
+        if (!isInABQ(lat, lng, addr)) {
+            console.log(`📍 Rejecting non-ABQ suggestion: ${parseResult.name} (${addr})`);
+            return res.status(200).json({ valid: false, error: `"${parseResult.name}" does not appear to be in Albuquerque.` });
+        }
+
         const restaurant = {
             id: deterministicId,
             name: parseResult.name,
@@ -153,6 +194,8 @@ DO NOT include any text outside the JSON. Use DOUBLE QUOTES only.`;
             basePoints: 100,
             source: 'user-submitted',
             submittedAt: Date.now(),
+            ...(lat && { latitude: lat }),
+            ...(lng && { longitude: lng })
         };
 
         return res.status(200).json({ valid: true, restaurant });

@@ -3,6 +3,39 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 const MAX_RETRIES = 5;
 const INITIAL_BACKOFF = 5000;
 
+// Albuquerque bounding box (generous to include edges of metro)
+const ABQ_BOUNDS = {
+    north: 35.22,
+    south: 34.94,
+    west: -106.82,
+    east: -106.47
+};
+
+// Valid Albuquerque zip codes
+const ABQ_ZIPS = new Set([
+    '87101', '87102', '87103', '87104', '87105', '87106', '87107', '87108', '87109', '87110',
+    '87111', '87112', '87113', '87114', '87116', '87117', '87119', '87120', '87121', '87122',
+    '87123', '87124', '87125', '87131', '87153', '87154', '87158', '87176', '87181', '87187',
+    '87190', '87191', '87192', '87193', '87194', '87195', '87196', '87197', '87198', '87199'
+]);
+
+const isInABQ = (lat?: number, lng?: number, address?: string): boolean => {
+    // Check 1: Coordinates within bounding box (most reliable)
+    if (lat && lng) {
+        if (lat >= ABQ_BOUNDS.south && lat <= ABQ_BOUNDS.north &&
+            lng >= ABQ_BOUNDS.west && lng <= ABQ_BOUNDS.east) {
+            return true;
+        }
+    }
+    // Check 2: Address contains "albuquerque" or "abq"
+    const addr = (address || '').toLowerCase();
+    if (addr.includes('albuquerque') || addr.includes('abq')) return true;
+    // Check 3: Valid ABQ zip code in address
+    const zipMatch = addr.match(/\b(\d{5})\b/);
+    if (zipMatch && ABQ_ZIPS.has(zipMatch[1])) return true;
+    return false;
+};
+
 const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
 const safeBtoa = (str: string): string => {
@@ -91,11 +124,14 @@ export default async function handler(req: any, res: any) {
             console.log(`🔍 AI Search Attempt ${attempt + 1}: "${searchTerm}" in "${location}"`);
 
             const prompt = `Search for "${searchTerm}" in ${location}.
-      CRITICAL: Only include restaurants physically located in Albuquerque, New Mexico. 
-      Do NOT include places in Santa Fe, Rio Rancho, Bernalillo, or other nearby towns.
-      Return a diverse mix of at least 25-30 spots.
+      CRITICAL RULES:
+      1. ONLY include restaurants physically located in Albuquerque, New Mexico.
+      2. Do NOT include places in Santa Fe, Rio Rancho, Bernalillo, Los Lunas, or other nearby towns.
+      3. Do NOT include restaurants that are PERMANENTLY CLOSED on Google Maps.
+      4. Only include places that are currently open and operating.
+      5. Return a diverse mix of at least 25-30 spots.
 
-        CRITICAL: For "googlePlaceType", you MUST select ONE from this OFFICIAL Google Places list:
+      CRITICAL: For "googlePlaceType", you MUST select ONE from this OFFICIAL Google Places list:
       "american_restaurant", "bakery", "bar", "bar_and_grill", "barbecue_restaurant",
         "brazilian_restaurant", "breakfast_restaurant", "brunch_restaurant",
         "cafe", "chinese_restaurant", "coffee_shop", "deli", "dessert_shop", "diner",
@@ -107,8 +143,9 @@ export default async function handler(req: any, res: any) {
       If none fit perfectly, choose the closest match (e.g. "gastropub" -> "bar_and_grill").
 
       Output MUST be a RAW JSON array of objects using DOUBLE QUOTES only:
-        [{ "name": "Official Name", "googlePlaceType": "place_type_from_list", "address": "Full Street Address, Albuquerque, NM", "detail": "Short description" }]
+        [{ "name": "Official Name", "googlePlaceType": "place_type_from_list", "address": "Full Street Address, Albuquerque, NM ZIP", "detail": "Short description", "latitude": 35.xxxx, "longitude": -106.xxxx, "permanentlyClosed": false }]
       
+      IMPORTANT: Include latitude and longitude coordinates for each restaurant.
       DO NOT use backticks for strings. DO NOT include any text outside the JSON array.
       Verify activity and address via Google Search.`;
 
@@ -149,10 +186,21 @@ export default async function handler(req: any, res: any) {
                 const idBase = `${safeName}-${location}`.toLowerCase().trim();
                 const deterministicId = safeBtoa(idBase).replace(/[^a-zA-Z0-9]/g, '').slice(0, 24);
 
-                const fullAddress = (restaurant.address || "").toLowerCase();
-                const isABQ = fullAddress.includes('albuquerque') || fullAddress.includes('abq') || fullAddress.includes('871');
+                // Skip permanently closed restaurants
+                if (restaurant.permanentlyClosed === true) {
+                    console.log(`🚫 Skipping closed restaurant: ${safeName}`);
+                    return;
+                }
 
-                if (!isABQ) return;
+                // Geo validation: check coordinates + address + zip
+                const lat = parseFloat(restaurant.latitude) || undefined;
+                const lng = parseFloat(restaurant.longitude) || undefined;
+                const addr = restaurant.address || '';
+
+                if (!isInABQ(lat, lng, addr)) {
+                    console.log(`📍 Skipping non-ABQ restaurant: ${safeName} (${addr})`);
+                    return;
+                }
 
                 finalRestaurants.push({
                     id: deterministicId,
@@ -164,7 +212,9 @@ export default async function handler(req: any, res: any) {
                     userRatingsTotal: Math.floor(Math.random() * 1000) + 100,
                     googleMapsUri: `https://www.google.com/maps/search/${encodeURIComponent(safeName + " " + location)}`,
                     basePoints: 100,
-                    sourceUrl: `https://www.google.com/maps/search/${encodeURIComponent(safeName + " " + location)}`
+                    sourceUrl: `https://www.google.com/maps/search/${encodeURIComponent(safeName + " " + location)}`,
+                    ...(lat && { latitude: lat }),
+                    ...(lng && { longitude: lng })
                 });
 
                 categoriesSet.add(mapPlaceTypeToCategory(restaurant.googlePlaceType || ""));

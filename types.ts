@@ -12,6 +12,8 @@ export interface Restaurant {
   source?: 'seeded' | 'user-submitted'; // How the restaurant was added
   submittedAt?: number; // Timestamp when user submitted
   googlePlaceType?: string; // Official Google Place Type (e.g. hamburger_restaurant)
+  latitude?: number;  // For geo-bounding validation
+  longitude?: number; // For geo-bounding validation
 }
 
 export interface AuthenticatedVote {
