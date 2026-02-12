@@ -1,4 +1,4 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const MAX_RETRIES = 5;
 const INITIAL_BACKOFF = 5000;
@@ -76,16 +76,18 @@ export default async function handler(req: any, res: any) {
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
+        console.error("❌ GEMINI_API_KEY is missing.");
         return res.status(500).json({ error: 'GEMINI_API_KEY not configured' });
     }
 
-    // Matching the original SDK pattern to fix linting and ensure functionality
-    const ai = new GoogleGenAI({ apiKey } as any);
+    const genAI = new GoogleGenerativeAI(apiKey);
     let attempt = 0;
 
     const executeSearch = async (): Promise<any> => {
         try {
             const searchTerm = query?.trim() || "the best local food and hidden gems";
+            console.log(`🔍 AI Search Attempt ${attempt + 1}: ${searchTerm} in ${location}`);
+
             const prompt = `Search for "${searchTerm}" in ${location}.
       CRITICAL: Only include restaurants physically located in Albuquerque, New Mexico. 
       Do NOT include places in Santa Fe, Rio Rancho, Bernalillo, or other nearby towns.
@@ -100,31 +102,26 @@ export default async function handler(req: any, res: any) {
         "mexican_restaurant", "pizza_restaurant", "seafood_restaurant", "steak_house",
         "sushi_restaurant", "thai_restaurant", "vegetarian_restaurant", "vietnamese_restaurant".
       
-      If none fit perfectly, choose the closest match(e.g. "gastropub" -> "bar_and_grill").
+      If none fit perfectly, choose the closest match (e.g. "gastropub" -> "bar_and_grill").
 
       Output MUST be a RAW JSON array of objects using DOUBLE QUOTES only:
         [{ "name": "Official Name", "googlePlaceType": "place_type_from_list", "address": "Full Street Address, Albuquerque, NM", "detail": "Short description" }]
       
-      DO NOT use backticks for strings.DO NOT include any text outside the JSON array.
+      DO NOT use backticks for strings. DO NOT include any text outside the JSON array.
       Verify activity and address via Google Search.`;
 
-            const response = await (ai as any).models.generateContent({
+            const model = genAI.getGenerativeModel({
                 model: "gemini-1.5-flash",
-                contents: prompt,
-                config: {
-                    tools: [{ googleMaps: {} }, { googleSearch: {} }],
-                    toolConfig: coords ? {
-                        retrievalConfig: {
-                            latLng: {
-                                latitude: coords.latitude,
-                                longitude: coords.longitude
-                            }
-                        }
-                    } : undefined
-                },
+                tools: [
+                    { googleSearchRetrieval: {} } as any
+                ],
             });
 
-            const text = response.text || "";
+            const result = await model.generateContent(prompt);
+            const response = await result.response;
+            const text = response.text();
+
+            console.log(`📄 AI Response (Search): ${text.substring(0, 500)}...`);
             const aiRestaurants = extractJson(text);
 
             const finalRestaurants: any[] = [];
@@ -161,9 +158,11 @@ export default async function handler(req: any, res: any) {
                 categories: Array.from(categoriesSet).sort()
             };
         } catch (error: any) {
+            console.error(`❌ Search Attempt ${attempt + 1} Failed:`, error);
             if (attempt < MAX_RETRIES) {
                 attempt++;
                 const backoff = INITIAL_BACKOFF * Math.pow(2, attempt - 1);
+                console.log(`🔄 Retrying in ${backoff}ms...`);
                 await delay(backoff);
                 return executeSearch();
             }

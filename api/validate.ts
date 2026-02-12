@@ -1,4 +1,4 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const safeBtoa = (str: string): string => {
     try {
@@ -57,12 +57,21 @@ export default async function handler(req: any, res: any) {
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
+        console.error("❌ GEMINI_API_KEY is missing from environment variables.");
         return res.status(500).json({ error: 'GEMINI_API_KEY not configured' });
     }
 
-    const ai = new GoogleGenAI({ apiKey } as any);
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({
+        model: "gemini-1.5-flash",
+        tools: [
+            { googleSearchRetrieval: {} } as any
+        ],
+    });
 
     try {
+        console.log(`🔍 Validating restaurant: ${restaurantName} in ${location}`);
+
         const prompt = `Verify if "${restaurantName}" is a REAL, CURRENTLY OPERATING restaurant, cafe, or similar food establishment in ${location}.
 
 CRITICAL REQUIREMENTS:
@@ -88,43 +97,40 @@ If you cannot find an EXACT match on Google Maps, if it's permanently closed, or
 
 DO NOT include any text outside the JSON. Use DOUBLE QUOTES only.`;
 
-        const response = await (ai as any).models.generateContent({
-            model: "gemini-1.5-flash",
-            contents: prompt,
-            config: {
-                tools: [{ googleMaps: {} }, { googleSearch: {} }],
-            },
-        });
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        const text = response.text();
 
-        const text = response.text || "";
+        console.log("📄 AI Response:", text);
 
         let cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();
         const firstBrace = cleaned.indexOf('{');
         const lastBrace = cleaned.lastIndexOf('}');
 
         if (firstBrace === -1 || lastBrace === -1) {
-            return res.status(200).json({ valid: false, error: "Could not verify restaurant format." });
+            console.error("❌ Failed to parse JSON from AI response:", text);
+            return res.status(200).json({ valid: false, error: "Could not verify restaurant format. AI response was invalid JSON." });
         }
 
         cleaned = cleaned.substring(firstBrace, lastBrace + 1);
-        const result = JSON.parse(cleaned);
+        const parseResult = JSON.parse(cleaned);
 
-        if (!result.valid) {
-            return res.status(200).json({ valid: false, error: result.reason || "Restaurant not found" });
+        if (!parseResult.valid) {
+            return res.status(200).json({ valid: false, error: parseResult.reason || "Restaurant not found" });
         }
 
-        const idBase = `${result.name}-${location}`.toLowerCase().trim();
+        const idBase = `${parseResult.name}-${location}`.toLowerCase().trim();
         const deterministicId = safeBtoa(idBase).replace(/[^a-zA-Z0-9]/g, '').slice(0, 24);
 
         const restaurant = {
             id: deterministicId,
-            name: result.name,
-            category: mapPlaceTypeToCategory(result.googlePlaceType || "Restaurants"),
-            googlePlaceType: result.googlePlaceType,
-            address: result.address || result.detail || "Albuquerque, NM",
+            name: parseResult.name,
+            category: mapPlaceTypeToCategory(parseResult.googlePlaceType || "Restaurants"),
+            googlePlaceType: parseResult.googlePlaceType,
+            address: parseResult.address || parseResult.detail || "Albuquerque, NM",
             rating: 4.5,
             userRatingsTotal: 0,
-            googleMapsUri: `https://www.google.com/maps/search/${encodeURIComponent(result.name + " " + location)}`,
+            googleMapsUri: `https://www.google.com/maps/search/${encodeURIComponent(parseResult.name + " " + location)}`,
             basePoints: 100,
             source: 'user-submitted',
             submittedAt: Date.now(),
@@ -133,6 +139,7 @@ DO NOT include any text outside the JSON. Use DOUBLE QUOTES only.`;
         res.status(200).json({ valid: true, restaurant });
 
     } catch (error: any) {
-        res.status(500).json({ valid: false, error: "Failed to validate restaurant." });
+        console.error("❌ Validation Error in Serverless Function:", error);
+        res.status(500).json({ valid: false, error: "Failed to validate restaurant. Internal server error." });
     }
 }

@@ -8,6 +8,7 @@ import SuggestModal from './components/SuggestModal';
 import AllRestaurantsView from './components/AllRestaurantsView';
 import AdminDashboard from './components/AdminDashboard';
 import AdminLoginModal from './components/AdminLoginModal';
+import TutorialModal from './components/TutorialModal';
 import { useAuth } from './contexts/AuthContext';
 import { db, isConfigured } from './firebase';
 import { doc, onSnapshot, setDoc, deleteDoc, increment, collection, query, where, getDocs } from "firebase/firestore";
@@ -29,6 +30,7 @@ const App: React.FC = () => {
   const [isAdminLoginOpen, setIsAdminLoginOpen] = useState(false);
   const [view, setView] = useState<'dashboard' | 'list' | 'admin'>('dashboard');
   const [pendingSuggestions, setPendingSuggestions] = useState<Restaurant[]>([]);
+  const [isTutorialOpen, setIsTutorialOpen] = useState(false);
 
   // Voting state
   const [userVotes, setUserVotes] = useState<UserVoteRecord>(() => {
@@ -520,6 +522,14 @@ const App: React.FC = () => {
                 ABQ Only
               </div>
 
+              <button
+                onClick={() => setIsTutorialOpen(true)}
+                className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-[10px] uppercase tracking-wider rounded-lg transition-colors"
+                title="How it works"
+              >
+                ❓ How it works
+              </button>
+
               {isAdmin && (
                 <button
                   onClick={() => setView('admin')}
@@ -713,6 +723,31 @@ const App: React.FC = () => {
                       <div className="h-[2px] flex-1 bg-slate-100 rounded-full"></div>
                       <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">{groupedRestaurants[category].length} Spots</span>
                     </div>
+
+                    {/* Category Top 5 Widget */}
+                    {groupedRestaurants[category].length >= 3 && (
+                      <div className="mb-12 bg-white/40 backdrop-blur-sm border border-slate-100 rounded-[24px] p-6 shadow-sm">
+                        <div className="flex items-center gap-2 mb-6">
+                          <div className="w-2 h-2 rounded-full bg-slate-400"></div>
+                          <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{category} Leaderboard</h3>
+                        </div>
+
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                          {groupedRestaurants[category].slice(0, 5).map((r, i) => (
+                            <div key={r.id} className="group relative bg-white border border-slate-50 p-3 rounded-xl hover:shadow-md transition-all cursor-pointer">
+                              <div className="absolute -top-2 -left-2 w-6 h-6 bg-slate-900 text-white rounded-lg flex items-center justify-center font-black text-[10px] shadow-md z-10">
+                                #{i + 1}
+                              </div>
+                              <div className="font-black text-slate-800 text-xs leading-tight mb-1 line-clamp-1">{r.name}</div>
+                              <div className="text-[9px] font-black text-orange-600 uppercase tracking-wider">
+                                {getRestaurantPoints(r).toLocaleString()} <span className="opacity-60">pts</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
                       {groupedRestaurants[category].map((restaurant) => {
                         const catVote = userVotes.categoryVotes[category];
@@ -769,6 +804,12 @@ const App: React.FC = () => {
         onSuccess={() => {
           // Success is handled by the "Shared" message in the modal
         }}
+      />
+
+      {/* Tutorial Modal */}
+      <TutorialModal
+        isOpen={isTutorialOpen}
+        onClose={() => setIsTutorialOpen(false)}
       />
     </div>
   );
