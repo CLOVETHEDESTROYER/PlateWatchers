@@ -23,6 +23,7 @@ const mapPlaceTypeToCategory = (types: string[]): string => {
         "american_restaurant": "American",
         "bakery": "Bakery",
         "bar": "Bars & Pubs",
+        "bar_and_grill": "Bars & Pubs",
         "barbecue_restaurant": "BBQ",
         "brazilian_restaurant": "Brazilian",
         "breakfast_restaurant": "Breakfast & Brunch",
@@ -31,6 +32,7 @@ const mapPlaceTypeToCategory = (types: string[]): string => {
         "chinese_restaurant": "Chinese",
         "coffee_shop": "Coffee Shops",
         "deli": "Delis & Sandwiches",
+        "sandwich_shop": "Delis & Sandwiches",
         "dessert_shop": "Dessert",
         "diner": "Diners",
         "donut_shop": "Donuts",
@@ -41,22 +43,33 @@ const mapPlaceTypeToCategory = (types: string[]): string => {
         "indian_restaurant": "Indian",
         "italian_restaurant": "Italian",
         "japanese_restaurant": "Japanese",
+        "korean_restaurant": "Korean",
+        "mediterranean_restaurant": "Mediterranean",
         "mexican_restaurant": "Mexican",
+        "middle_eastern_restaurant": "Middle Eastern",
         "pizza_restaurant": "Pizza",
+        "ramen_restaurant": "Ramen",
         "seafood_restaurant": "Seafood",
+        "spanish_restaurant": "Spanish",
         "steak_house": "Steakhouse",
         "sushi_restaurant": "Sushi",
+        "taco_restaurant": "Tacos",
         "thai_restaurant": "Thai",
+        "turkish_restaurant": "Turkish",
         "vegetarian_restaurant": "Vegetarian",
+        "vegan_restaurant": "Vegan",
         "vietnamese_restaurant": "Vietnamese"
     };
 
-    // Find the first matching type
+    // The FIRST type in the array is always the primaryType (passed in by the caller).
+    // This is the most accurate category from Google Maps.
+    // Only fall through to secondary types if primaryType has no mapping.
     for (const type of types) {
         if (mapping[type]) return mapping[type];
     }
     return "Restaurants";
 };
+
 
 // ─── Firestore REST Cache Helpers ───
 // Uses Firestore REST API to cache Places results (no firebase-admin dependency needed)

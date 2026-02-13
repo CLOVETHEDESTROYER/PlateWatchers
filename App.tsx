@@ -29,10 +29,20 @@ const App: React.FC = () => {
   const [isSeeding, setIsSeeding] = useState(false);
   const [seedingStatus, setSeedingStatus] = useState("");
   const [isSuggestModalOpen, setIsSuggestModalOpen] = useState(false);
+  const [isLoginPromptOpen, setIsLoginPromptOpen] = useState(false);
   const [isAdminLoginOpen, setIsAdminLoginOpen] = useState(false);
   const [view, setView] = useState<'dashboard' | 'list' | 'admin'>('dashboard');
   const [pendingSuggestions, setPendingSuggestions] = useState<Restaurant[]>([]);
   const [isTutorialOpen, setIsTutorialOpen] = useState(false);
+
+  // Auth gate for suggesting: require login first
+  const handleSuggestClick = useCallback(() => {
+    if (!user) {
+      setIsLoginPromptOpen(true);
+      return;
+    }
+    setIsSuggestModalOpen(true);
+  }, [user]);
 
   // Voting state
   const [userVotes, setUserVotes] = useState<UserVoteRecord>(() => {
@@ -557,7 +567,7 @@ const App: React.FC = () => {
               )}
 
               <button
-                onClick={() => setIsSuggestModalOpen(true)}
+                onClick={handleSuggestClick}
                 className="hidden sm:block bg-orange-600 text-white px-3 py-2 sm:px-5 sm:py-2.5 rounded-xl font-black text-[10px] sm:text-xs uppercase tracking-widest hover:bg-orange-700 transition-all shadow-lg active:scale-95"
               >
                 + Suggest
@@ -613,7 +623,7 @@ const App: React.FC = () => {
               <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-base">🔍</span>
             </form>
             <button
-              onClick={() => setIsSuggestModalOpen(true)}
+              onClick={handleSuggestClick}
               className="whitespace-nowrap px-4 py-2 bg-orange-50 text-orange-600 text-xs font-bold rounded-xl hover:bg-orange-100 transition-colors hidden sm:block"
             >
               + Suggest New
@@ -748,7 +758,7 @@ const App: React.FC = () => {
                 </p>
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
                   {searchQuery && (
-                    <button onClick={() => setIsSuggestModalOpen(true)} className="bg-orange-600 text-white px-8 py-4 rounded-xl font-black text-lg shadow-xl hover:bg-orange-700 transition-all active:scale-95">Suggest "{searchQuery}"</button>
+                    <button onClick={handleSuggestClick} className="bg-orange-600 text-white px-8 py-4 rounded-xl font-black text-lg shadow-xl hover:bg-orange-700 transition-all active:scale-95">Suggest "{searchQuery}"</button>
                   )}
                   {isAdmin && (
                     <button onClick={() => setView('admin')} className="bg-slate-900 text-white px-8 py-4 rounded-xl font-black text-lg shadow-xl hover:bg-slate-800 transition-all active:scale-95">Go to Admin Console</button>
@@ -845,12 +855,54 @@ const App: React.FC = () => {
 
       {/* Floating Action Button for Mobile Suggest */}
       <button
-        onClick={() => setIsSuggestModalOpen(true)}
+        onClick={handleSuggestClick}
         className="sm:hidden fixed bottom-24 right-6 w-14 h-14 bg-orange-600 text-white rounded-full shadow-2xl flex items-center justify-center text-2xl z-40 active:scale-95 transition-transform"
         style={{ marginBottom: 'env(safe-area-inset-bottom)' }}
       >
         +
       </button>
+
+      {/* Login Prompt Modal (shown when non-logged-in user tries to Suggest) */}
+      {isLoginPromptOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setIsLoginPromptOpen(false)}>
+          <div className="bg-white rounded-2xl p-8 max-w-sm w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-2xl font-black text-slate-800 mb-2">Sign In to Suggest</h2>
+            <p className="text-slate-500 text-sm mb-6">You need to sign in before suggesting a restaurant. This helps us keep the community trustworthy.</p>
+            <div className="space-y-3">
+              <button
+                onClick={async () => {
+                  try {
+                    await loginWithFacebook();
+                    setIsLoginPromptOpen(false);
+                    setIsSuggestModalOpen(true);
+                  } catch { }
+                }}
+                className="w-full py-3 bg-[#1877F2] text-white rounded-xl font-bold text-sm hover:bg-[#166FE5] transition-colors flex items-center justify-center gap-2"
+              >
+                <span>📘</span> Continue with Facebook
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    await loginWithGoogle();
+                    setIsLoginPromptOpen(false);
+                    setIsSuggestModalOpen(true);
+                  } catch { }
+                }}
+                className="w-full py-3 bg-white border-2 border-slate-200 text-slate-700 rounded-xl font-bold text-sm hover:bg-slate-50 transition-colors flex items-center justify-center gap-2"
+              >
+                <span>🔵</span> Continue with Google
+              </button>
+            </div>
+            <button
+              onClick={() => setIsLoginPromptOpen(false)}
+              className="w-full mt-4 py-2 text-slate-400 text-sm font-medium hover:text-slate-600 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Admin Login Modal */}
       <AdminLoginModal
