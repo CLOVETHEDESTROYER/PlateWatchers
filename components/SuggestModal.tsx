@@ -18,16 +18,16 @@ const SuggestModal: React.FC<SuggestModalProps> = ({ isOpen, onClose, location, 
     const [success, setSuccess] = useState(false);
     const [lastSuggestedName, setLastSuggestedName] = useState('');
 
-    // Rate limiting: max 5 submissions per hour
+    // Rate limiting: max 3 submissions per 24 hours
     const checkRateLimit = (): boolean => {
-        const key = 'pw_submission_timestamps';
+        const key = 'pw_submission_timestamps_v2';
         const now = Date.now();
-        const oneHour = 60 * 60 * 1000;
+        const oneDay = 24 * 60 * 60 * 1000;
 
         const timestamps: number[] = JSON.parse(localStorage.getItem(key) || '[]');
-        const recentTimestamps = timestamps.filter(t => now - t < oneHour);
+        const recentTimestamps = timestamps.filter(t => now - t < oneDay);
 
-        if (recentTimestamps.length >= 5) {
+        if (recentTimestamps.length >= 3) {
             return false;
         }
 
@@ -45,9 +45,10 @@ const SuggestModal: React.FC<SuggestModalProps> = ({ isOpen, onClose, location, 
         }
 
         if (!checkRateLimit()) {
-            setError('Too many submissions. Please try again in an hour.');
+            setError('Daily limit reached (3 suggestions per day). Please try again tomorrow.');
             return;
         }
+
 
         setIsSubmitting(true);
         setError(null);

@@ -99,27 +99,28 @@ export default async function handler(req: any, res: any) {
     try {
         console.log(`🔍 Validating restaurant: "${restaurantName}" in "${location}"`);
 
-        const prompt = `Verify if "${restaurantName}" is a REAL, CURRENTLY OPERATING restaurant, cafe, or similar food establishment in ${location}.
+        const prompt = `Verify if "${restaurantName}" is a REAL restaurant, cafe, or similar food establishment in ${location}.
 
 CRITICAL REQUIREMENTS:
-1. The place MUST have a verified listing on Google Maps. 
+1. The place MUST have a verified listing on Google Maps.
 2. The place MUST be located strictly within Albuquerque, New Mexico. (No Santa Fe, Rio Rancho, Bernalillo, Los Lunas, etc.)
-3. The place MUST be open and currently in business — NOT permanently closed.
-4. If you find multiple locations, pick the one in Albuquerque.
+3. The place must NOT be PERMANENTLY CLOSED. However, restaurants that are simply closed for the evening or have limited hours ARE STILL VALID. Do NOT reject a restaurant just because it is outside its current business hours.
+4. If you find MULTIPLE locations in Albuquerque, pick the most popular one (highest rated / most reviews).
+5. Use the EXACT address as listed on Google Maps. Do NOT guess or approximate addresses.
 
 If the place is VERIFIED on Google Maps and meets ALL criteria, return this EXACT JSON:
-{"valid": true, "name": "Official Name", "googlePlaceType": "place_type_from_list", "address": "Full Street Address, Albuquerque, NM ZIP", "detail": "Brief description", "latitude": 35.xxxx, "longitude": -106.xxxx}
+{"valid": true, "name": "Official Google Maps Name", "googlePlaceType": "place_type_from_list", "address": "Exact Full Street Address from Google Maps, Albuquerque, NM ZIP", "detail": "Brief description", "latitude": 35.xxxx, "longitude": -106.xxxx}
 
 Category MUST be one of these Google Place Types:
-"american_restaurant", "bakery", "bar", "bar_and_grill", "barbecue_restaurant", 
-"brazilian_restaurant", "breakfast_restaurant", "brunch_restaurant", 
-"cafe", "chinese_restaurant", "coffee_shop", "deli", "dessert_shop", "diner", 
-"donut_shop", "fast_food_restaurant", "fine_dining_restaurant", "hamburger_restaurant", 
-"ice_cream_shop", "indian_restaurant", "italian_restaurant", "japanese_restaurant", 
-"mexican_restaurant", "pizza_restaurant", "seafood_restaurant", "steak_house", 
+"american_restaurant", "bakery", "bar", "bar_and_grill", "barbecue_restaurant",
+"brazilian_restaurant", "breakfast_restaurant", "brunch_restaurant",
+"cafe", "chinese_restaurant", "coffee_shop", "deli", "dessert_shop", "diner",
+"donut_shop", "fast_food_restaurant", "fine_dining_restaurant", "hamburger_restaurant",
+"ice_cream_shop", "indian_restaurant", "italian_restaurant", "japanese_restaurant",
+"mexican_restaurant", "pizza_restaurant", "seafood_restaurant", "steak_house",
 "sushi_restaurant", "thai_restaurant", "vegetarian_restaurant", "vietnamese_restaurant"
 
-If you cannot find an EXACT match on Google Maps, if it's permanently closed, if it's outside Albuquerque, or if it's not a food establishment, return:
+If you cannot find a match on Google Maps, if it's PERMANENTLY closed, if it's outside Albuquerque, or if it's not a food establishment, return:
 {"valid": false, "reason": "Explanation of why it failed"}
 
 IMPORTANT: Always include latitude and longitude for valid results.
@@ -190,7 +191,7 @@ DO NOT include any text outside the JSON. Use DOUBLE QUOTES only.`;
             address: parseResult.address || parseResult.detail || "Albuquerque, NM",
             rating: 4.5,
             userRatingsTotal: 0,
-            googleMapsUri: `https://www.google.com/maps/search/${encodeURIComponent(parseResult.name + " " + location)}`,
+            googleMapsUri: `https://www.google.com/maps/search/${encodeURIComponent(parseResult.name + " " + (parseResult.address || location))}`,
             basePoints: 100,
             source: 'user-submitted',
             submittedAt: Date.now(),

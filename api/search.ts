@@ -128,8 +128,9 @@ export default async function handler(req: any, res: any) {
       1. ONLY include restaurants physically located in Albuquerque, New Mexico.
       2. Do NOT include places in Santa Fe, Rio Rancho, Bernalillo, Los Lunas, or other nearby towns.
       3. Do NOT include restaurants that are PERMANENTLY CLOSED on Google Maps.
-      4. Only include places that are currently open and operating.
+      4. Restaurants that are simply closed for the evening or have limited hours ARE STILL VALID. Do NOT exclude a restaurant just because it is outside its current business hours.
       5. Return a diverse mix of at least 25-30 spots.
+      6. Use the EXACT address as listed on Google Maps for each restaurant. Do NOT guess or approximate addresses.
 
       CRITICAL: For "googlePlaceType", you MUST select ONE from this OFFICIAL Google Places list:
       "american_restaurant", "bakery", "bar", "bar_and_grill", "barbecue_restaurant",
@@ -143,7 +144,7 @@ export default async function handler(req: any, res: any) {
       If none fit perfectly, choose the closest match (e.g. "gastropub" -> "bar_and_grill").
 
       Output MUST be a RAW JSON array of objects using DOUBLE QUOTES only:
-        [{ "name": "Official Name", "googlePlaceType": "place_type_from_list", "address": "Full Street Address, Albuquerque, NM ZIP", "detail": "Short description", "latitude": 35.xxxx, "longitude": -106.xxxx, "permanentlyClosed": false }]
+        [{ "name": "Official Google Maps Name", "googlePlaceType": "place_type_from_list", "address": "Exact Full Street Address from Google Maps, Albuquerque, NM ZIP", "detail": "Short description", "latitude": 35.xxxx, "longitude": -106.xxxx, "permanentlyClosed": false }]
       
       IMPORTANT: Include latitude and longitude coordinates for each restaurant.
       DO NOT use backticks for strings. DO NOT include any text outside the JSON array.
@@ -210,7 +211,7 @@ export default async function handler(req: any, res: any) {
                     address: restaurant.address || restaurant.detail || "Albuquerque, NM",
                     rating: 4 + (Math.random() * 0.9),
                     userRatingsTotal: Math.floor(Math.random() * 1000) + 100,
-                    googleMapsUri: `https://www.google.com/maps/search/${encodeURIComponent(safeName + " " + location)}`,
+                    googleMapsUri: `https://www.google.com/maps/search/${encodeURIComponent(safeName + " " + (restaurant.address || location))}`,
                     basePoints: 100,
                     sourceUrl: `https://www.google.com/maps/search/${encodeURIComponent(safeName + " " + location)}`,
                     ...(lat && { latitude: lat }),
