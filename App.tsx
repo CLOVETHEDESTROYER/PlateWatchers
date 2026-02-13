@@ -9,7 +9,9 @@ import AllRestaurantsView from './components/AllRestaurantsView';
 import AdminDashboard from './components/AdminDashboard';
 import AdminLoginModal from './components/AdminLoginModal';
 import TutorialModal from './components/TutorialModal';
+import MobileNav from './components/MobileNav';
 import { useAuth } from './contexts/AuthContext';
+
 import { db, isConfigured } from './firebase';
 import { doc, onSnapshot, setDoc, deleteDoc, increment, collection, query, where, getDocs } from "firebase/firestore";
 
@@ -547,7 +549,7 @@ const App: React.FC = () => {
               {isAdmin && (
                 <button
                   onClick={() => setView('admin')}
-                  className={`p-2 rounded-xl transition-all ${view === 'admin' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                  className={`hidden md:block p-2 rounded-xl transition-all ${view === 'admin' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
                   title="Admin Console"
                 >
                   ⚙️
@@ -556,10 +558,11 @@ const App: React.FC = () => {
 
               <button
                 onClick={() => setIsSuggestModalOpen(true)}
-                className="bg-orange-600 text-white px-3 py-2 sm:px-5 sm:py-2.5 rounded-xl font-black text-[10px] sm:text-xs uppercase tracking-widest hover:bg-orange-700 transition-all shadow-lg active:scale-95"
+                className="hidden sm:block bg-orange-600 text-white px-3 py-2 sm:px-5 sm:py-2.5 rounded-xl font-black text-[10px] sm:text-xs uppercase tracking-widest hover:bg-orange-700 transition-all shadow-lg active:scale-95"
               >
                 + Suggest
               </button>
+
 
               <div className="w-[1px] h-6 bg-slate-200 ml-1 sm:ml-2 hidden sm:block"></div>
 
@@ -596,19 +599,18 @@ const App: React.FC = () => {
       </header>
 
       {/* Search Bar - Below Header */}
-      {/* Search Bar - Below Header */}
       {view !== 'admin' && (
-        <div className="fixed top-[52px] sm:top-[72px] left-0 right-0 bg-white/70 backdrop-blur-2xl z-40 border-b border-slate-100/50 px-3 sm:px-6 py-2 sm:py-3">
+        <div className="fixed top-[52px] sm:top-[72px] left-0 right-0 bg-white/70 backdrop-blur-2xl z-40 border-b border-slate-100/50 px-3 sm:px-6 py-2.5 sm:py-3 transition-all duration-300">
           <div className="max-w-7xl mx-auto flex items-center gap-4">
-            <form onSubmit={(e) => e.preventDefault()} className="relative flex-1">
+            <form onSubmit={(e) => { e.preventDefault(); handleSearch(); }} className="relative flex-1">
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search BBQ, Pizza, Burgers..."
-                className="w-full pl-12 pr-6 py-2.5 bg-slate-100 border-transparent rounded-2xl focus:bg-white focus:ring-4 focus:ring-orange-100 focus:border-orange-400 outline-none transition-all font-medium text-sm"
+                className="w-full pl-11 pr-4 py-2 bg-slate-100/80 border-transparent rounded-2xl focus:bg-white focus:ring-4 focus:ring-orange-100 focus:border-orange-400 outline-none transition-all font-medium text-sm"
               />
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg">🔍</span>
+              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-base">🔍</span>
             </form>
             <button
               onClick={() => setIsSuggestModalOpen(true)}
@@ -621,7 +623,8 @@ const App: React.FC = () => {
       )}
 
       {/* Main Content */}
-      <div className="pt-28 pb-32 sm:pt-32 sm:pb-40">
+      <div className={`transition-all duration-300 ${view === 'admin' ? 'pt-20' : 'pt-32 sm:pt-40'} pb-32`}>
+
         {view === 'list' ? (
           <AllRestaurantsView
             restaurants={data?.restaurants || []}
@@ -845,11 +848,28 @@ const App: React.FC = () => {
         </div>
       </div>
 
+      {/* Mobile Navigation */}
+      <MobileNav
+        currentView={view}
+        setView={setView}
+        isAdmin={isAdmin}
+      />
+
+      {/* Floating Action Button for Mobile Suggest */}
+      <button
+        onClick={() => setIsSuggestModalOpen(true)}
+        className="sm:hidden fixed bottom-24 right-6 w-14 h-14 bg-orange-600 text-white rounded-full shadow-2xl flex items-center justify-center text-2xl z-40 active:scale-95 transition-transform"
+        style={{ marginBottom: 'env(safe-area-inset-bottom)' }}
+      >
+        +
+      </button>
+
       {/* Admin Login Modal */}
       <AdminLoginModal
         isOpen={isAdminLoginOpen}
         onClose={() => setIsAdminLoginOpen(false)}
       />
+
 
       {/* Suggest Restaurant Modal */}
       <SuggestModal

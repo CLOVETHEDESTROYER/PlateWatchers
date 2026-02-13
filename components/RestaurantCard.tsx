@@ -59,8 +59,8 @@ const RestaurantCard: React.FC<RestaurantCardProps> = ({
 
   return (
     <div className={`bg-white/95 backdrop-blur-sm rounded-xl shadow-sm border p-5 transition-all duration-300 flex flex-col h-full relative ${isTopChoice ? 'ring-2 ring-orange-500 border-orange-200 shadow-md bg-orange-50/10' :
-        isRunnerUp ? 'ring-2 ring-amber-400 border-amber-200 shadow-sm' :
-          'border-slate-200 hover:shadow-md'
+      isRunnerUp ? 'ring-2 ring-amber-400 border-amber-200 shadow-sm' :
+        'border-slate-200 hover:shadow-md'
       }`}>
 
       {isGlobalActive && (globalCommunityPoints || 0) > 500 && (
@@ -106,10 +106,10 @@ const RestaurantCard: React.FC<RestaurantCardProps> = ({
 
       <div className="flex-grow"></div>
 
-      <div className="grid grid-cols-2 gap-2 mt-6">
+      <div className="grid grid-cols-2 gap-3 mt-6">
         <button
           onClick={() => onVote(restaurant.id, restaurant.category, 'top')}
-          className={`py-2 px-1 rounded-xl text-xs font-black transition-all flex flex-col items-center justify-center border-2 ${isTopChoice ? 'bg-orange-600 text-white border-orange-600' : 'bg-white text-orange-600 border-orange-100 hover:border-orange-200'
+          className={`py-3 px-2 rounded-xl text-xs font-black transition-all flex flex-col items-center justify-center border-2 ${isTopChoice ? 'bg-orange-600 text-white border-orange-600 shadow-md' : 'bg-white text-orange-600 border-orange-100 hover:border-orange-200'
             }`}
         >
           <span>{isTopChoice ? '✓ Voted' : '1st Choice'}</span>
@@ -118,7 +118,7 @@ const RestaurantCard: React.FC<RestaurantCardProps> = ({
 
         <button
           onClick={() => onVote(restaurant.id, restaurant.category, 'runnerUp')}
-          className={`py-2 px-1 rounded-xl text-xs font-black transition-all flex flex-col items-center justify-center border-2 ${isRunnerUp ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-amber-600 border-amber-100 hover:border-amber-200'
+          className={`py-3 px-2 rounded-xl text-xs font-black transition-all flex flex-col items-center justify-center border-2 ${isRunnerUp ? 'bg-amber-500 text-white border-amber-500 shadow-md' : 'bg-white text-amber-600 border-amber-100 hover:border-amber-200'
             }`}
         >
           <span>{isRunnerUp ? '✓ Voted' : '2nd Choice'}</span>
@@ -128,12 +128,13 @@ const RestaurantCard: React.FC<RestaurantCardProps> = ({
 
       <button
         onClick={() => onVoteOverall(restaurant.id)}
-        className={`w-full mt-3 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border-2 ${isOverallTopPick ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-indigo-600 border-indigo-50 hover:bg-indigo-50/50'
+        className={`w-full mt-3 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border-2 ${isOverallTopPick ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-white text-indigo-600 border-indigo-50 hover:bg-indigo-50/50'
           }`}
       >
         {isOverallTopPick ? '★ Ultimate Choice' : 'Vote Ultimate Pick'}
         <span className="block text-[8px] opacity-70 mt-0.5">Worth 500 Global Points</span>
       </button>
+
 
       <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between">
         <div className="flex items-center gap-4">
