@@ -58,6 +58,63 @@ const mapPlaceTypeToCategory = (types: string[]): string => {
     return "Restaurants";
 };
 
+// ─── Firestore REST Cache Helpers ───
+// Uses Firestore REST API to cache Places results (no firebase-admin dependency needed)
+const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+const FIRESTORE_PROJECT_ID = 'gen-lang-client-0758776695';
+const FIRESTORE_DB = 'platewatchers';
+
+function normalizeCacheKey(query: string, location: string): string {
+    return `${query.toLowerCase().trim()}|${location.toLowerCase().trim()}`
+        .replace(/[^a-z0-9| ]/g, '')
+        .replace(/\s+/g, '-')
+        .slice(0, 128);
+}
+
+async function getCachedResults(cacheKey: string): Promise<any[] | null> {
+    try {
+        const encodedKey = encodeURIComponent(cacheKey);
+        const url = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT_ID}/databases/${FIRESTORE_DB}/documents/placesCache/${encodedKey}`;
+        const response = await fetch(url);
+        if (!response.ok) return null;
+
+        const doc = await response.json();
+        if (!doc.fields) return null;
+
+        // Check TTL
+        const cachedAt = parseInt(doc.fields.cachedAt?.integerValue || '0');
+        if (Date.now() - cachedAt > CACHE_TTL_MS) return null;
+
+        // Parse cached candidates
+        const candidatesJson = doc.fields.candidates?.stringValue;
+        if (!candidatesJson) return null;
+
+        return JSON.parse(candidatesJson);
+    } catch {
+        return null; // Cache miss on any error
+    }
+}
+
+async function setCachedResults(cacheKey: string, candidates: any[]): Promise<void> {
+    try {
+        const encodedKey = encodeURIComponent(cacheKey);
+        const url = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT_ID}/databases/${FIRESTORE_DB}/documents/placesCache/${encodedKey}`;
+        await fetch(url, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                fields: {
+                    candidates: { stringValue: JSON.stringify(candidates) },
+                    cachedAt: { integerValue: String(Date.now()) },
+                    query: { stringValue: cacheKey }
+                }
+            })
+        });
+    } catch {
+        // Silently fail — caching is best-effort
+    }
+}
+
 export default async function handler(req: any, res: any) {
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Method not allowed' });
@@ -75,7 +132,13 @@ export default async function handler(req: any, res: any) {
     }
 
     try {
-        console.log(`🔍 Places API search for: "${restaurantName}" in "${location}"`);
+        // ─── Check cache first ───
+        const cacheKey = normalizeCacheKey(restaurantName, location);
+        const cached = await getCachedResults(cacheKey);
+        if (cached) {
+            return res.status(200).json({ candidates: cached, cached: true });
+        }
+
 
         // Call Google Places API Text Search (New)
         const placesResponse = await fetch('https://places.googleapis.com/v1/places:searchText', {
@@ -126,14 +189,14 @@ export default async function handler(req: any, res: any) {
         const data = await placesResponse.json();
         const places = data.places || [];
 
-        console.log(`📍 Places API returned ${places.length} results`);
+
 
         // Filter and map results
         const candidates = places
             .filter((place: any) => {
                 // Filter out permanently closed
                 if (place.businessStatus === 'CLOSED_PERMANENTLY') {
-                    console.log(`🚫 Skipping permanently closed: ${place.displayName?.text}`);
+
                     return false;
                 }
 
@@ -159,7 +222,7 @@ export default async function handler(req: any, res: any) {
 
                 const isFoodPlace = foodTypes.has(primaryType) || types.some((t: string) => foodTypes.has(t));
                 if (!isFoodPlace) {
-                    console.log(`🌿 Skipping non-food place: ${place.displayName?.text} (types: ${types.join(', ')})`);
+
                     return false;
                 }
 
@@ -174,7 +237,7 @@ export default async function handler(req: any, res: any) {
                         lng >= ABQ_BOUNDS.west && lng <= ABQ_BOUNDS.east);
 
                 if (!inABQ) {
-                    console.log(`📍 Skipping non-ABQ result: ${place.displayName?.text} (${place.formattedAddress})`);
+
                 }
                 return inABQ;
             })
@@ -205,7 +268,11 @@ export default async function handler(req: any, res: any) {
                 };
             });
 
-        console.log(`✅ Returning ${candidates.length} verified candidates for "${restaurantName}"`);
+        // ─── Cache results for future lookups ───
+        if (candidates.length > 0) {
+            await setCachedResults(cacheKey, candidates);
+        }
+
         return res.status(200).json({ candidates });
 
     } catch (error: any) {
@@ -215,8 +282,7 @@ export default async function handler(req: any, res: any) {
         });
         return res.status(500).json({
             candidates: [],
-            error: "Failed to search for restaurants. Please try again.",
-            details: error.message
+            error: "Failed to search for restaurants. Please try again."
         });
     }
 }

@@ -113,7 +113,7 @@ export default async function handler(req: any, res: any) {
         return res.status(500).json({ error: 'GEMINI_API_KEY not configured in Vercel settings.' });
     }
 
-    console.log(`🔑 Key check: ${apiKey.substring(0, 4)}... (Total length: ${apiKey.length})`);
+
 
     const genAI = new GoogleGenerativeAI(apiKey);
     let attempt = 0;
@@ -121,7 +121,7 @@ export default async function handler(req: any, res: any) {
     const executeSearch = async (): Promise<any> => {
         try {
             const searchTerm = query?.trim() || "the best local food and hidden gems";
-            console.log(`🔍 AI Search Attempt ${attempt + 1}: "${searchTerm}" in "${location}"`);
+
 
             const prompt = `Search for "${searchTerm}" in ${location}.
       CRITICAL RULES:
@@ -153,7 +153,7 @@ export default async function handler(req: any, res: any) {
             // Attempt 1: With Google Search Tool (Experimental - uses v1beta)
             let text = "";
             try {
-                console.log("🛠️ Attempting search WITH Google Search tool (v1beta)...");
+
                 const genAIBeta = new GoogleGenerativeAI(apiKey);
                 const modelWithTools = genAIBeta.getGenerativeModel({
                     model: "gemini-2.5-flash",
@@ -162,7 +162,7 @@ export default async function handler(req: any, res: any) {
 
                 const result = await modelWithTools.generateContent(prompt);
                 text = result.response.text();
-                console.log("✅ Tool Success.");
+
             } catch (toolError: any) {
                 console.warn("⚠️ Google Search tool failed or not supported, falling back to STABLE v1 model:", toolError.message);
                 // Attempt 2: Fallback to STABLE basic model without tools
@@ -173,10 +173,10 @@ export default async function handler(req: any, res: any) {
 
                 const result = await basicModel.generateContent(prompt);
                 text = result.response.text();
-                console.log("✅ Stable Fallback Success.");
+
             }
 
-            console.log(`📄 AI Response (Search): ${text.substring(0, 500)}...`);
+
             const aiRestaurants = extractJson(text);
 
             const finalRestaurants: any[] = [];
@@ -189,7 +189,7 @@ export default async function handler(req: any, res: any) {
 
                 // Skip permanently closed restaurants
                 if (restaurant.permanentlyClosed === true) {
-                    console.log(`🚫 Skipping closed restaurant: ${safeName}`);
+
                     return;
                 }
 
@@ -199,7 +199,7 @@ export default async function handler(req: any, res: any) {
                 const addr = restaurant.address || '';
 
                 if (!isInABQ(lat, lng, addr)) {
-                    console.log(`📍 Skipping non-ABQ restaurant: ${safeName} (${addr})`);
+
                     return;
                 }
 
@@ -235,7 +235,7 @@ export default async function handler(req: any, res: any) {
             if (attempt < MAX_RETRIES) {
                 attempt++;
                 const backoff = INITIAL_BACKOFF * Math.pow(2, attempt - 1);
-                console.log(`🔄 Retrying in ${backoff}ms...`);
+
                 await delay(backoff);
                 return executeSearch();
             }

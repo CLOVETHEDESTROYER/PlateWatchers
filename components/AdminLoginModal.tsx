@@ -26,7 +26,7 @@ const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClose }) =>
             await loginWithEmail(email, password);
             onClose();
         } catch (err: any) {
-            console.log("Login Error Code:", err.code);
+
             if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
                 // If it looks like the account doesn't exist, offer to create it
                 setShowCreateButton(true);

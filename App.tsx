@@ -97,9 +97,9 @@ const App: React.FC = () => {
             restaurants: saved,
             categories: Array.from(cats).sort()
           });
-          console.log("Loaded from Firestore:", saved.length);
+
         } else {
-          console.log("No data in Firestore. Ready to seed.");
+
         }
       } catch (e) {
         console.error("Failed to load from DB", e);
@@ -154,9 +154,9 @@ const App: React.FC = () => {
       } else {
         if (isConfigured) {
           // Save search results to Firestore (this is how manual seeding works!)
-          console.log(`Saving ${result.restaurants.length} restaurants from search...`);
+
           await saveRestaurantsBatch(result.restaurants);
-          console.log("Saved! Reloading full database...");
+
 
           // Reload ALL restaurants from DB to include previous + new
           const allRestaurants = await getSavedRestaurants();
@@ -197,7 +197,7 @@ const App: React.FC = () => {
     try {
       for (const cat of categoriesToSeed) {
         setSeedingStatus(`Scraping: ${cat}...`);
-        console.log("Seeding:", cat);
+
         const result = await fetchRestaurants(cat, location, coords);
         if (result.restaurants.length > 0 && isConfigured) {
           setSeedingStatus(`Saving ${result.restaurants.length} spots...`);

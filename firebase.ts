@@ -23,12 +23,12 @@ let auth: any = null;
 
 if (isConfigured) {
   try {
-    console.log("Initializing Firebase with Project ID:", firebaseConfig.projectId);
+
     const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
     // Connect to the named database "platewatchers"
     db = getFirestore(app, "platewatchers");
     auth = getAuth(app);
-    console.log("Firebase initialized successfully.");
+
   } catch (e) {
     console.error("Firebase initialization failed:", e);
     console.warn("Falling back to local mode.");

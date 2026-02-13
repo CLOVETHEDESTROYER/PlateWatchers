@@ -42,7 +42,7 @@ export const saveRestaurant = async (restaurant: Restaurant) => {
                 submittedAt: existing.submittedAt || restaurant.submittedAt || Date.now()
             });
             await setDoc(restaurantRef, merged, { merge: true });
-            console.log(`Restaurant updated (stats preserved): ${restaurant.name}`);
+
         } else {
             // New restaurant — clean and save
             const cleaned = cleanData({
@@ -51,7 +51,7 @@ export const saveRestaurant = async (restaurant: Restaurant) => {
                 submittedAt: restaurant.submittedAt || Date.now()
             });
             await setDoc(restaurantRef, cleaned, { merge: true });
-            console.log(`New restaurant saved: ${restaurant.name}`);
+
         }
     } catch (error) {
         console.error("Error saving restaurant:", error);
@@ -67,7 +67,7 @@ export const deleteRestaurant = async (id: string) => {
     if (!db) return;
     try {
         await deleteDoc(doc(db, COLLECTION_NAME, id));
-        console.log(`Restaurant deleted: ${id}`);
+
     } catch (error) {
         console.error("Error deleting restaurant:", error);
         throw error;
@@ -85,7 +85,7 @@ export const saveRestaurantsBatch = async (restaurants: Restaurant[]) => {
     try {
         const promises = restaurants.map(r => saveRestaurant(r));
         await Promise.all(promises);
-        console.log(`Batch saved ${restaurants.length} restaurants.`);
+
     } catch (error) {
         console.error("Error saving batch:", error);
     }
@@ -120,7 +120,7 @@ export const deleteUserVotes = async (userId: string) => {
     try {
         // We will implement the user_votes collection soon. 
         // This function will clear all docs where userId matches.
-        console.log(`Privacy: Deleting all data associated with user ${userId}`);
+
         // Implementation will follow when user_votes is wired up.
     } catch (error) {
         console.error("Error deleting user data:", error);
@@ -139,7 +139,7 @@ export const saveSuggestion = async (restaurant: Restaurant) => {
             status: 'pending',
             submittedAt: Date.now()
         });
-        console.log(`Suggestion saved: ${restaurant.name}`);
+
     } catch (error) {
         console.error("Error saving suggestion:", error);
         throw error;
@@ -171,7 +171,7 @@ export const approveSuggestion = async (restaurant: Restaurant) => {
         await saveRestaurant(restaurant);
         // Delete from suggestions
         await deleteDoc(doc(db, "suggestions", restaurant.id));
-        console.log(`Suggestion approved and moved: ${restaurant.id}`);
+
     } catch (error) {
         console.error("Error approving suggestion:", error);
         throw error;
@@ -185,7 +185,7 @@ export const rejectSuggestion = async (id: string) => {
     if (!db) return;
     try {
         await deleteDoc(doc(db, "suggestions", id));
-        console.log(`Suggestion rejected/deleted: ${id}`);
+
     } catch (error) {
         console.error("Error rejecting suggestion:", error);
         throw error;
@@ -220,7 +220,7 @@ export const updateRestaurantCategory = async (id: string, newCategory: string, 
         });
 
         await batch.commit();
-        console.log(`Recategorized ${id} to ${newCategory}. Removed ${votesSnap.size} old votes.`);
+
 
     } catch (error) {
         console.error("Error updating category:", error);

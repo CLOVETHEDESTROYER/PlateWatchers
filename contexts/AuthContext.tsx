@@ -37,12 +37,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Diagnostics and Admin logic
     useEffect(() => {
         if (user) {
-            console.log("🔒 Auth User Info:", {
-                uid: user.uid,
-                email: user.email,
-                displayName: user.displayName,
-                providerData: user.providerData
-            });
+
 
             // Hardcoded Admin Email
             const ADMIN_EMAIL = 'analoguepro@gmail.com';
