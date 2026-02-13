@@ -136,26 +136,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
             if (!auth) throw new Error("Firebase Auth not initialized");
 
-            if (isMobile()) {
-                addLog('🔵 Using signInWithRedirect (mobile)');
-                await signInWithRedirect(auth, facebookProvider);
-            } else {
-                addLog('🔵 Using signInWithPopup (desktop)');
-                await signInWithPopup(auth, facebookProvider);
-            }
+            // ALWAYS try popup first (works on desktop AND modern mobile browsers)
+            // signInWithRedirect is broken on iOS Safari due to ITP cross-origin blocking
+            addLog('🔵 Attempting signInWithPopup...');
+            const result = await signInWithPopup(auth, facebookProvider);
+            addLog(`🔵 Popup SUCCESS: ${result.user.displayName || result.user.uid?.slice(0, 8)}`);
         } catch (err: any) {
             addLog(`🔵 Facebook login ERROR: ${err.code} - ${err.message}`);
             if (err.code === 'auth/account-exists-with-different-credential') {
                 setError("An account already exists with the same email address but different sign-in credentials.");
             } else if (err.code === 'auth/popup-closed-by-user') {
-                // Ignore
+                addLog('🔵 User closed popup (ignored)');
             } else if (err.code === 'auth/popup-blocked') {
-                addLog('🔵 Popup blocked, falling back to redirect');
+                addLog('🔵 Popup blocked by browser, falling back to redirect...');
                 try {
                     await signInWithRedirect(auth!, facebookProvider);
-                } catch { }
+                } catch (redirectErr: any) {
+                    addLog(`🔵 Redirect also failed: ${redirectErr.code}`);
+                }
+            } else if (err.code === 'auth/cancelled-popup-request') {
+                addLog('🔵 Duplicate popup request (ignored)');
             } else {
-                setError("Failed to log in with Facebook. Please try again.");
+                setError(`Login failed: ${err.code || err.message}`);
             }
         }
     };
@@ -166,14 +168,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
             if (!auth) throw new Error("Firebase Auth not initialized");
 
-            if (isMobile()) {
-                await signInWithRedirect(auth, googleProvider);
-            } else {
-                await signInWithPopup(auth, googleProvider);
-            }
+            addLog('🟢 Attempting signInWithPopup...');
+            const result = await signInWithPopup(auth, googleProvider);
+            addLog(`🟢 Popup SUCCESS: ${result.user.displayName || result.user.uid?.slice(0, 8)}`);
         } catch (err: any) {
             addLog(`🟢 Google login ERROR: ${err.code} - ${err.message}`);
-            if (err.code === 'auth/popup-blocked') {
+            if (err.code === 'auth/popup-closed-by-user') {
+                // Ignore
+            } else if (err.code === 'auth/popup-blocked') {
                 try {
                     await signInWithRedirect(auth!, googleProvider);
                 } catch { }
