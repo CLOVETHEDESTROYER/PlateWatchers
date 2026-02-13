@@ -3,10 +3,17 @@ import { initializeApp, getApp, getApps } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { getAuth, FacebookAuthProvider, GoogleAuthProvider } from "firebase/auth";
 
-// REPLACE THESE WITH YOUR ACTUAL FIREBASE PROJECT CONFIG FROM THE FIREBASE CONSOLE
+// Use the app's own domain as authDomain in production to avoid cross-origin
+// storage partitioning issues (Android Chrome, iOS Safari).
+// The Vercel rewrite in vercel.json proxies /__/auth/* to firebaseapp.com.
+const isLocalhost = typeof window !== 'undefined' &&
+  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  authDomain: isLocalhost
+    ? import.meta.env.VITE_FIREBASE_AUTH_DOMAIN  // localhost: use firebaseapp.com directly
+    : window.location.hostname,                    // production: use own domain (proxied)
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
