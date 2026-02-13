@@ -87,36 +87,47 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         addLog(`🔧 Auth init. isMobile=${isMobile()}, UA=${navigator.userAgent.slice(0, 50)}`);
 
-        // Set persistence to LOCAL
-        setPersistence(auth, browserLocalPersistence)
-            .then(() => addLog('💾 Persistence set to LOCAL'))
-            .catch((e) => addLog(`💾 Persistence FAILED: ${e.code || e.message}`));
+        let unsubscribe: (() => void) | undefined;
 
-        // Handle redirect result (for mobile auth returning from Facebook/Google)
-        addLog('🔄 Checking getRedirectResult...');
-        getRedirectResult(auth)
-            .then((result) => {
+        const initAuth = async () => {
+            try {
+                // STEP 1: Set persistence FIRST — must complete before anything else
+                await setPersistence(auth!, browserLocalPersistence);
+                addLog('💾 Persistence set to LOCAL ✅');
+            } catch (e: any) {
+                addLog(`💾 Persistence FAILED: ${e.code || e.message}`);
+            }
+
+            // STEP 2: Check for redirect result (mobile auth returning from Facebook)
+            try {
+                addLog('🔄 Checking getRedirectResult...');
+                const result = await getRedirectResult(auth!);
                 if (result?.user) {
                     addLog(`🔄 Redirect SUCCESS: ${result.user.displayName || result.user.uid?.slice(0, 8)}`);
                     setUser(result.user);
                 } else {
                     addLog('🔄 Redirect result: null (no pending redirect)');
                 }
-            })
-            .catch((err) => {
+            } catch (err: any) {
                 addLog(`🔄 Redirect ERROR: ${err.code} - ${err.message}`);
                 if (err.code === 'auth/account-exists-with-different-credential') {
                     setError("An account already exists with the same email. Try a different sign-in method.");
                 }
-            });
+            }
 
-        // Listen for auth state changes
-        const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-            addLog(`👂 onAuthStateChanged: ${firebaseUser ? (firebaseUser.displayName || firebaseUser.uid?.slice(0, 8)) : 'null'}`);
-            setUser(firebaseUser);
-            setLoading(false);
-        });
-        return unsubscribe;
+            // STEP 3: NOW register auth state listener (persistence is guaranteed set)
+            unsubscribe = onAuthStateChanged(auth!, (firebaseUser) => {
+                addLog(`👂 onAuthStateChanged: ${firebaseUser ? (firebaseUser.displayName || firebaseUser.uid?.slice(0, 8)) : 'null'}`);
+                setUser(firebaseUser);
+                setLoading(false);
+            });
+        };
+
+        initAuth();
+
+        return () => {
+            if (unsubscribe) unsubscribe();
+        };
     }, []);
 
     const loginWithFacebook = async () => {
