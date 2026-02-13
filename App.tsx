@@ -16,7 +16,8 @@ import { db, isConfigured } from './firebase';
 import { doc, onSnapshot, setDoc, deleteDoc, increment, collection, query, where, getDocs } from "firebase/firestore";
 
 const App: React.FC = () => {
-  const { user, isAdmin, loginWithFacebook, loginWithGoogle, logout, loading: authLoading } = useAuth();
+  const { user, isAdmin, loginWithFacebook, loginWithGoogle, logout, loading: authLoading, authDebugLog } = useAuth();
+  const [showDebug, setShowDebug] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [location] = useState('Albuquerque, New Mexico');
   const [loading, setLoading] = useState(false);
@@ -578,9 +579,9 @@ const App: React.FC = () => {
             </div>
 
 
-            <div className="flex items-center gap-2 sm:gap-4 shrink-0">
-              {/* Albuquerque Badge */}
-              <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-orange-50 border border-orange-100 rounded-lg text-orange-600 font-bold text-[10px] uppercase tracking-wider">
+            <div className="flex items-center gap-1.5 sm:gap-4">
+              {/* Albuquerque Badge - desktop only */}
+              <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-orange-50 border border-orange-100 rounded-lg text-orange-600 font-bold text-[10px] uppercase tracking-wider">
                 <span className="w-1.5 h-1.5 bg-orange-500 rounded-full animate-pulse"></span>
                 ABQ Only
               </div>
@@ -603,15 +604,15 @@ const App: React.FC = () => {
                 </button>
               )}
 
+              {/* + Suggest - hidden on mobile (FAB handles it) */}
               <button
                 onClick={handleSuggestClick}
-                className="hidden sm:block bg-orange-600 text-white px-3 py-2 sm:px-5 sm:py-2.5 rounded-xl font-black text-[10px] sm:text-xs uppercase tracking-widest hover:bg-orange-700 transition-all shadow-lg active:scale-95"
+                className="hidden md:block bg-orange-600 text-white px-3 py-2 sm:px-5 sm:py-2.5 rounded-xl font-black text-[10px] sm:text-xs uppercase tracking-widest hover:bg-orange-700 transition-all shadow-lg active:scale-95"
               >
                 + Suggest
               </button>
 
-
-              <div className="w-[1px] h-6 bg-slate-200 ml-1 sm:ml-2 hidden sm:block"></div>
+              <div className="w-[1px] h-6 bg-slate-200 ml-1 sm:ml-2 hidden md:block"></div>
 
               {user ? (
                 <div className="flex items-center gap-3">
@@ -619,21 +620,23 @@ const App: React.FC = () => {
                     <div className="text-xs font-black text-slate-900 leading-tight">{user.displayName}</div>
                     <button onClick={logout} className="text-[9px] font-bold text-slate-400 hover:text-orange-600 uppercase tracking-widest transition-colors">Sign Out</button>
                   </div>
-                  {user.photoURL && <img src={user.photoURL} alt="" className="w-9 h-9 rounded-full border-2 border-white shadow-md" />}
+                  {user.photoURL && <img src={user.photoURL} alt="" className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border-2 border-white shadow-md" />}
+                  {/* Mobile sign-out (no photo) */}
+                  {!user.photoURL && <button onClick={logout} className="sm:hidden text-[9px] font-bold text-slate-400 uppercase">Out</button>}
                 </div>
               ) : (
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5 sm:gap-3">
                   <button
                     onClick={loginWithFacebook}
                     disabled={authLoading}
-                    className="flex items-center gap-2 bg-[#1877F2] text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl font-bold text-[10px] sm:text-xs hover:opacity-90 transition-all"
+                    className="flex items-center gap-1.5 bg-[#1877F2] text-white px-2.5 py-1.5 sm:px-4 sm:py-2 rounded-lg sm:rounded-xl font-bold text-[10px] sm:text-xs hover:opacity-90 transition-all whitespace-nowrap"
                   >
-                    <span className="hidden sm:inline">Login with facebook</span>
-                    <span className="sm:hidden">Login</span>
+                    📘 <span className="hidden sm:inline">Login with Facebook</span>
+                    <span className="sm:hidden">Sign In</span>
                   </button>
                   <button
                     onClick={() => setIsAdminLoginOpen(true)}
-                    className="p-2 text-slate-400 hover:text-slate-900 transition-colors"
+                    className="hidden sm:block p-2 text-slate-400 hover:text-slate-900 transition-colors"
                     title="Staff Login"
                   >
                     🔑
@@ -899,6 +902,30 @@ const App: React.FC = () => {
         +
       </button>
 
+      {/* TEMPORARY: Auth Debug Panel - remove after fixing mobile auth */}
+      <div className="fixed bottom-0 left-0 right-0 z-[9999]" style={{ marginBottom: 'env(safe-area-inset-bottom)' }}>
+        <button
+          onClick={() => setShowDebug(!showDebug)}
+          className="absolute bottom-20 left-2 w-8 h-8 bg-red-600 text-white rounded-full text-xs font-bold shadow-lg z-50 flex items-center justify-center"
+        >
+          🐛
+        </button>
+        {showDebug && (
+          <div className="bg-black/95 text-green-400 text-[10px] font-mono p-3 max-h-[50vh] overflow-y-auto border-t-2 border-red-500">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-red-400 font-bold">AUTH DEBUG LOG</span>
+              <span className="text-yellow-400">user={user ? '✅' : '❌'} mobile={/iPhone|Android/i.test(navigator.userAgent) ? 'Y' : 'N'}</span>
+            </div>
+            {authDebugLog.length === 0 ? (
+              <div className="text-gray-500">No auth events yet...</div>
+            ) : (
+              authDebugLog.map((log, i) => (
+                <div key={i} className="py-0.5 border-b border-gray-800">{log}</div>
+              ))
+            )}
+          </div>
+        )}
+      </div>
       {/* Login Prompt Modal (shown when non-logged-in user tries to Suggest) */}
       {isLoginPromptOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setIsLoginPromptOpen(false)}>
