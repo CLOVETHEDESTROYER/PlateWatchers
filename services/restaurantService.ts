@@ -5,6 +5,24 @@ import { Restaurant } from "../types";
 const COLLECTION_NAME = "restaurants";
 
 /**
+ * Wipes ALL restaurants from Firestore. Admin-only, used before re-seeding
+ * with accurate Google Places data.
+ */
+export const wipeAllRestaurants = async (): Promise<number> => {
+    if (!db) return 0;
+    try {
+        const snapshot = await getDocs(collection(db, COLLECTION_NAME));
+        const batch = writeBatch(db);
+        snapshot.forEach((docSnap) => batch.delete(docSnap.ref));
+        await batch.commit();
+        return snapshot.size;
+    } catch (error) {
+        console.error("Error wiping restaurants:", error);
+        throw error;
+    }
+};
+
+/**
  * Saves a single restaurant to Firestore.
  * Merges with existing data to update fields without overwriting everything.
  */
@@ -107,6 +125,43 @@ export const getSavedRestaurants = async (): Promise<Restaurant[]> => {
     } catch (error) {
         console.error("Error getting restaurants:", error);
         return [];
+    }
+};
+
+/**
+ * One-time data cleanup: fixes category typos from old AI-generated data.
+ * Safe to call multiple times — only updates documents that have typos.
+ */
+export const fixCategoryTypos = async (): Promise<number> => {
+    if (!db) return 0;
+
+    const typoMap: Record<string, string> = {
+        "Dalis & Sandwiches": "Delis & Sandwiches",
+        "Dalis": "Delis & Sandwiches",
+        "Deli": "Delis & Sandwiches",
+    };
+
+    try {
+        const querySnapshot = await getDocs(collection(db, COLLECTION_NAME));
+        let fixedCount = 0;
+
+        const batch = writeBatch(db);
+        querySnapshot.forEach((docSnap) => {
+            const data = docSnap.data();
+            const corrected = typoMap[data.category];
+            if (corrected) {
+                batch.update(docSnap.ref, { category: corrected });
+                fixedCount++;
+            }
+        });
+
+        if (fixedCount > 0) {
+            await batch.commit();
+        }
+        return fixedCount;
+    } catch (error) {
+        console.error("Error fixing category typos:", error);
+        return 0;
     }
 };
 

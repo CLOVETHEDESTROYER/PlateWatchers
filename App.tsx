@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { fetchRestaurants } from './services/geminiService';
-import { saveRestaurantsBatch, getSavedRestaurants, deleteUserVotes, approveSuggestion, rejectSuggestion, getPendingSuggestions, deleteRestaurant, updateRestaurantCategory } from './services/restaurantService';
+import { saveRestaurantsBatch, getSavedRestaurants, deleteUserVotes, approveSuggestion, rejectSuggestion, getPendingSuggestions, deleteRestaurant, updateRestaurantCategory, fixCategoryTypos, wipeAllRestaurants } from './services/restaurantService';
 import { Restaurant, UserVoteRecord, SearchResult, Coordinates, CategoryVote } from './types';
 import RestaurantCard from './components/RestaurantCard';
 import SuggestModal from './components/SuggestModal';
@@ -100,6 +100,8 @@ const App: React.FC = () => {
       setLoading(true);
       try {
         const saved = await getSavedRestaurants();
+        // One-time fix: correct any category typos from old AI data
+        await fixCategoryTypos();
         if (saved && saved.length > 0) {
           const cats = new Set<string>();
           saved.forEach(r => cats.add(r.category));
@@ -189,33 +191,68 @@ const App: React.FC = () => {
   }, [searchQuery, location, coords]);
 
   const handleSeed = async () => {
+    if (!window.confirm("⚠️ This will WIPE all existing restaurants and re-seed from Google Places API.\n\nAll votes will be reset. Continue?")) {
+      return;
+    }
     setIsSeeding(true);
     setLoading(true);
-    // Comprehensive category list for ABQ restaurant seeding
-    const categoriesToSeed = [
-      "Top Rated Restaurants",
-      "New Mexican Food",
-      "Best Burgers",
-      "Best Pizza",
-      "Fine Dining",
-      "Coffee Shops",
-      "Ice Cream Shops",
-      "Breakfast Brunch",
-      "Tacos",
-      "BBQ"
-    ];
-    try {
-      for (const cat of categoriesToSeed) {
-        setSeedingStatus(`Scraping: ${cat}...`);
 
-        const result = await fetchRestaurants(cat, location, coords);
-        if (result.restaurants.length > 0 && isConfigured) {
-          setSeedingStatus(`Saving ${result.restaurants.length} spots...`);
-          await saveRestaurantsBatch(result.restaurants);
+    // Comprehensive Google Places search queries for ABQ
+    const categoriesToSeed = [
+      "Best restaurants",
+      "Mexican food",
+      "New Mexican food",
+      "Burgers",
+      "Pizza",
+      "BBQ barbecue",
+      "Breakfast brunch",
+      "Coffee shops cafes",
+      "Tacos",
+      "Ice cream frozen treats",
+      "Sushi Japanese",
+      "Chinese food",
+      "Thai food",
+      "Italian restaurants",
+      "Seafood",
+      "Steakhouse",
+      "Sandwich shops delis",
+      "Fine dining"
+    ];
+
+    try {
+      // Step 1: Wipe old AI-generated data
+      setSeedingStatus("Wiping old data...");
+      await wipeAllRestaurants();
+
+      // Step 2: Seed from Google Places API
+      let totalAdded = 0;
+      for (let i = 0; i < categoriesToSeed.length; i++) {
+        const cat = categoriesToSeed[i];
+        setSeedingStatus(`[${i + 1}/${categoriesToSeed.length}] Searching: ${cat}...`);
+
+        try {
+          const response = await fetch('/api/hydrate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ category: cat, location })
+          });
+
+          if (response.ok) {
+            const result = await response.json();
+            if (result.restaurants?.length > 0 && isConfigured) {
+              setSeedingStatus(`Saving ${result.restaurants.length} ${cat} spots...`);
+              await saveRestaurantsBatch(result.restaurants);
+              totalAdded += result.restaurants.length;
+            }
+          }
+        } catch (catError) {
+          // Continue with next category if one fails
         }
       }
-      setSeedingStatus("Finalizing...");
-      // Final Reload
+
+      setSeedingStatus(`✅ Done! Added ${totalAdded} restaurants. Loading...`);
+
+      // Step 3: Reload everything
       const saved = await getSavedRestaurants();
       const cats = new Set<string>();
       saved.forEach(r => cats.add(r.category));
@@ -880,18 +917,6 @@ const App: React.FC = () => {
                 className="w-full py-3 bg-[#1877F2] text-white rounded-xl font-bold text-sm hover:bg-[#166FE5] transition-colors flex items-center justify-center gap-2"
               >
                 <span>📘</span> Continue with Facebook
-              </button>
-              <button
-                onClick={async () => {
-                  try {
-                    await loginWithGoogle();
-                    setIsLoginPromptOpen(false);
-                    setIsSuggestModalOpen(true);
-                  } catch { }
-                }}
-                className="w-full py-3 bg-white border-2 border-slate-200 text-slate-700 rounded-xl font-bold text-sm hover:bg-slate-50 transition-colors flex items-center justify-center gap-2"
-              >
-                <span>🔵</span> Continue with Google
               </button>
             </div>
             <button
