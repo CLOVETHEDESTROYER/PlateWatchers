@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { fetchRestaurants } from './services/geminiService';
-import { saveRestaurantsBatch, getSavedRestaurants, deleteUserVotes, approveSuggestion, rejectSuggestion, getPendingSuggestions, deleteRestaurant } from './services/restaurantService';
+import { saveRestaurantsBatch, getSavedRestaurants, deleteUserVotes, approveSuggestion, rejectSuggestion, getPendingSuggestions, deleteRestaurant, updateRestaurantCategory } from './services/restaurantService';
 import { Restaurant, UserVoteRecord, SearchResult, Coordinates, CategoryVote } from './types';
 import RestaurantCard from './components/RestaurantCard';
 import SuggestModal from './components/SuggestModal';
@@ -339,11 +339,15 @@ const App: React.FC = () => {
     if (!data) return {};
     const groups: Record<string, Restaurant[]> = {};
     const query = searchQuery.toLowerCase().trim();
+    const terms = query.split(/\s+/).filter(t => t.length > 0);
 
     data.restaurants.forEach(r => {
       // Instant Local Filter
-      if (query && !r.name.toLowerCase().includes(query) && !r.category.toLowerCase().includes(query)) {
-        return;
+      if (terms.length > 0) {
+        const searchable = `${r.name} ${r.category} ${r.googlePlaceType || ''} ${r.address}`.toLowerCase();
+        // Check if ALL search terms are present in the searchable string (AND logic)
+        const matches = terms.every(term => searchable.includes(term));
+        if (!matches) return;
       }
 
       if (!groups[r.category]) groups[r.category] = [];
@@ -524,21 +528,6 @@ const App: React.FC = () => {
               </div>
             </div>
 
-            {/* Header Search - Restored Position */}
-            {view !== 'admin' && (
-              <div className="flex-1 max-w-xl hidden md:block">
-                <form onSubmit={(e) => { e.preventDefault(); handleSearch(); }} className="relative">
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search BBQ, Pizza, Burgers..."
-                    className="w-full pl-12 pr-6 py-2.5 bg-slate-100 border-transparent rounded-2xl focus:bg-white focus:ring-4 focus:ring-orange-100 focus:border-orange-400 outline-none transition-all font-medium text-sm"
-                  />
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg">🔍</span>
-                </form>
-              </div>
-            )}
 
             <div className="flex items-center gap-2 sm:gap-4 shrink-0">
               {/* Albuquerque Badge */}
@@ -606,20 +595,55 @@ const App: React.FC = () => {
         </div>
       </header>
 
+      {/* Search Bar - Below Header */}
+      {/* Search Bar - Below Header */}
+      {view !== 'admin' && (
+        <div className="fixed top-[52px] sm:top-[72px] left-0 right-0 bg-white/70 backdrop-blur-2xl z-40 border-b border-slate-100/50 px-3 sm:px-6 py-2 sm:py-3">
+          <div className="max-w-7xl mx-auto flex items-center gap-4">
+            <form onSubmit={(e) => e.preventDefault()} className="relative flex-1">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search BBQ, Pizza, Burgers..."
+                className="w-full pl-12 pr-6 py-2.5 bg-slate-100 border-transparent rounded-2xl focus:bg-white focus:ring-4 focus:ring-orange-100 focus:border-orange-400 outline-none transition-all font-medium text-sm"
+              />
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg">🔍</span>
+            </form>
+            <button
+              onClick={() => setIsSuggestModalOpen(true)}
+              className="whitespace-nowrap px-4 py-2 bg-orange-50 text-orange-600 text-xs font-bold rounded-xl hover:bg-orange-100 transition-colors hidden sm:block"
+            >
+              + Suggest New
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Main Content */}
-      <div className="pt-16 pb-32 sm:pt-20 sm:pb-40">
+      <div className="pt-28 pb-32 sm:pt-32 sm:pb-40">
         {view === 'list' ? (
           <AllRestaurantsView
             restaurants={data?.restaurants || []}
             onBack={() => setView('dashboard')}
+            onSuggest={() => setIsSuggestModalOpen(true)}
           />
         ) : view === 'admin' ? (
           <AdminDashboard
             onBack={() => setView('dashboard')}
+            restaurants={data?.restaurants || []}
             onSeed={handleSeed}
             onCleanup={handleCleanup}
             onApprove={handleApproveSuggestion}
             onReject={handleRejectSuggestion}
+            onRecategorize={async (id, newCat, oldCat) => {
+              await updateRestaurantCategory(id, newCat, oldCat);
+              // Refresh
+              const saved = await getSavedRestaurants();
+              const cats = new Set<string>();
+              saved.forEach(r => cats.add(r.category));
+              setData({ restaurants: saved, categories: Array.from(cats).sort() });
+            }}
             suggestions={pendingSuggestions}
             isSeeding={isSeeding}
             seedingStatus={seedingStatus}

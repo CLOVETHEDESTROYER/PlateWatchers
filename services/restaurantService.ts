@@ -1,4 +1,4 @@
-import { doc, setDoc, getDoc, collection, getDocs, deleteDoc } from "firebase/firestore";
+import { doc, setDoc, getDoc, collection, getDocs, deleteDoc, query, where, writeBatch } from "firebase/firestore";
 import { db } from "../firebase";
 import { Restaurant } from "../types";
 
@@ -16,8 +16,26 @@ export const saveRestaurant = async (restaurant: Restaurant) => {
 
     try {
         const restaurantRef = doc(db, COLLECTION_NAME, restaurant.id);
-        await setDoc(restaurantRef, restaurant, { merge: true });
-        console.log(`Restaurant saved: ${restaurant.name}`);
+        const docSnap = await getDoc(restaurantRef);
+
+        if (docSnap.exists()) {
+            // If exists, ONLY update info fields, preserving stats
+            const existing = docSnap.data();
+            await setDoc(restaurantRef, {
+                ...restaurant,
+                // Preserve existing stats if they exist
+                rating: existing.rating || restaurant.rating,
+                userRatingsTotal: existing.userRatingsTotal || restaurant.userRatingsTotal,
+                basePoints: existing.basePoints || restaurant.basePoints,
+                source: existing.source || restaurant.source,
+                submittedAt: existing.submittedAt || restaurant.submittedAt
+            }, { merge: true });
+            console.log(`Restaurant updated (stats preserved): ${restaurant.name}`);
+        } else {
+            // New restaurant? Save everything
+            await setDoc(restaurantRef, restaurant, { merge: true });
+            console.log(`New restaurant saved: ${restaurant.name}`);
+        }
     } catch (error) {
         console.error("Error saving restaurant:", error);
         throw error;
@@ -152,6 +170,42 @@ export const rejectSuggestion = async (id: string) => {
         console.log(`Suggestion rejected/deleted: ${id}`);
     } catch (error) {
         console.error("Error rejecting suggestion:", error);
+        throw error;
+    }
+};
+
+/**
+ * Updates a restaurant's category and removes conflicting votes.
+ */
+export const updateRestaurantCategory = async (id: string, newCategory: string, oldCategory: string) => {
+    if (!db) return;
+
+    try {
+        const batch = writeBatch(db);
+        const restaurantRef = doc(db, COLLECTION_NAME, id);
+        const votesRef = collection(db, "user_votes");
+
+        // 1. Update restaurant category
+        batch.update(restaurantRef, { category: newCategory });
+
+        // 2. Find and delete user votes for this restaurant in the OLD category
+        // We query by restaurantId AND category just to be safe, though ID should be unique to restaurant
+        const q = query(
+            votesRef,
+            where("restaurantId", "==", id),
+            where("category", "==", oldCategory)
+        );
+
+        const votesSnap = await getDocs(q);
+        votesSnap.forEach((voteDoc) => {
+            batch.delete(voteDoc.ref);
+        });
+
+        await batch.commit();
+        console.log(`Recategorized ${id} to ${newCategory}. Removed ${votesSnap.size} old votes.`);
+
+    } catch (error) {
+        console.error("Error updating category:", error);
         throw error;
     }
 };

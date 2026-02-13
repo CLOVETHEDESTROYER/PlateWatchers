@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Coordinates, Restaurant, SearchResult } from '../types';
 
 interface AdminDashboardProps {
@@ -7,7 +7,9 @@ interface AdminDashboardProps {
     onCleanup: () => Promise<void>;
     onApprove: (r: Restaurant) => Promise<void>;
     onReject: (id: string) => Promise<void>;
+    onRecategorize: (id: string, newCat: string, oldCat: string) => Promise<void>;
     suggestions: Restaurant[];
+    restaurants: Restaurant[];
     isSeeding: boolean;
     seedingStatus: string;
     loading: boolean;
@@ -19,12 +21,44 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     onCleanup,
     onApprove,
     onReject,
+    onRecategorize,
     suggestions,
+    restaurants,
     isSeeding,
     seedingStatus,
     loading
 }) => {
-    const [activeTab, setActiveTab] = React.useState<'tools' | 'approvals'>('approvals');
+    const [activeTab, setActiveTab] = useState<'tools' | 'approvals' | 'edit'>('approvals');
+    const [editSearch, setEditSearch] = useState('');
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const [newCategory, setNewCategory] = useState('');
+
+    const filteredRestaurants = React.useMemo(() => {
+        if (!editSearch) return [];
+        const q = editSearch.toLowerCase();
+        return restaurants.filter(r =>
+            r.name.toLowerCase().includes(q) ||
+            r.category.toLowerCase().includes(q) ||
+            r.googlePlaceType?.toLowerCase().includes(q)
+        ).slice(0, 50); // Limit results
+    }, [restaurants, editSearch]);
+
+    const handleStartEdit = (r: Restaurant) => {
+        setEditingId(r.id);
+        setNewCategory(r.category);
+    };
+
+    const handleSaveCategory = async (r: Restaurant) => {
+        if (!newCategory.trim() || newCategory === r.category) {
+            setEditingId(null);
+            return;
+        }
+        if (confirm(`Change category from "${r.category}" to "${newCategory}"?\n\nWARNING: This will remove existing votes for this restaurant in the "${r.category}" category to prevent data inconsistency.`)) {
+            await onRecategorize(r.id, newCategory.trim(), r.category);
+            setEditingId(null);
+        }
+    };
+
     return (
         <div className="min-h-screen pb-40 relative">
             <div className="max-w-7xl mx-auto px-4 mt-8">
@@ -40,23 +74,29 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <h1 className="text-xl sm:text-3xl font-black text-slate-900 ml-2 sm:ml-4">Admin Console</h1>
                     </div>
 
-                    <div className="flex bg-slate-100 p-1 rounded-2xl">
+                    <div className="flex bg-slate-100 p-1 rounded-2xl overflow-x-auto">
                         <button
                             onClick={() => setActiveTab('approvals')}
-                            className={`px-3 py-2 sm:px-6 sm:py-2 rounded-xl text-[10px] sm:text-sm font-black uppercase tracking-widest transition-all ${activeTab === 'approvals' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                            className={`px-3 py-2 sm:px-6 sm:py-2 rounded-xl text-[10px] sm:text-sm font-black uppercase tracking-widest transition-all whitespace-nowrap ${activeTab === 'approvals' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
                         >
                             Approvals {suggestions.length > 0 && <span className="ml-2 bg-orange-600 text-white px-2 py-0.5 rounded-full text-[10px]">{suggestions.length}</span>}
                         </button>
                         <button
+                            onClick={() => setActiveTab('edit')}
+                            className={`px-3 py-2 sm:px-6 sm:py-2 rounded-xl text-[10px] sm:text-sm font-black uppercase tracking-widest transition-all whitespace-nowrap ${activeTab === 'edit' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                        >
+                            Edit Data
+                        </button>
+                        <button
                             onClick={() => setActiveTab('tools')}
-                            className={`px-3 py-2 sm:px-6 sm:py-2 rounded-xl text-[10px] sm:text-sm font-black uppercase tracking-widest transition-all ${activeTab === 'tools' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                            className={`px-3 py-2 sm:px-6 sm:py-2 rounded-xl text-[10px] sm:text-sm font-black uppercase tracking-widest transition-all whitespace-nowrap ${activeTab === 'tools' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
                         >
                             Tools
                         </button>
                     </div>
                 </div>
 
-                {activeTab === 'tools' ? (
+                {activeTab === 'tools' && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                         {/* Database Management Card */}
                         <div className="bg-white/80 backdrop-blur-md border border-slate-200 rounded-2xl sm:rounded-3xl p-4 sm:p-8 shadow-sm">
@@ -133,16 +173,87 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                     <span className="text-xs font-black text-emerald-500 uppercase">Operational</span>
                                 </div>
                             </div>
-
-                            <div className="mt-8 p-4 bg-blue-50 border border-blue-100 rounded-xl">
-                                <h4 className="text-xs font-black text-blue-800 uppercase mb-2">Notice</h4>
-                                <p className="text-[10px] text-blue-600 leading-relaxed font-medium">
-                                    If you are having trouble seeing admin settings after logging in with Facebook, check the browser console for "🔒 Auth User Info" to verify your identifier matches the admin list.
-                                </p>
-                            </div>
                         </div>
                     </div>
-                ) : (
+                )}
+
+                {activeTab === 'edit' && (
+                    <div className="bg-white/80 backdrop-blur-md border border-slate-200 rounded-2xl sm:rounded-3xl p-4 sm:p-8 shadow-sm">
+                        <div className="flex items-center gap-4 mb-6">
+                            <div className="w-12 h-12 bg-blue-100 rounded-2xl flex items-center justify-center text-blue-600 text-2xl">
+                                ✏️
+                            </div>
+                            <div>
+                                <h2 className="text-xl font-black text-slate-800">Edit Restaurants</h2>
+                                <p className="text-sm text-slate-500 font-medium">Search and update restaurant categories.</p>
+                            </div>
+                        </div>
+
+                        <div className="mb-8">
+                            <input
+                                type="text"
+                                placeholder="Search by name or category..."
+                                value={editSearch}
+                                onChange={(e) => setEditSearch(e.target.value)}
+                                className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-3 text-sm font-medium focus:outline-none focus:ring-4 focus:ring-blue-100 transition-all"
+                            />
+                        </div>
+
+                        {editSearch && filteredRestaurants.length === 0 && (
+                            <div className="text-center py-8 text-slate-400">No restaurants found.</div>
+                        )}
+
+                        <div className="space-y-4">
+                            {filteredRestaurants.map(r => (
+                                <div key={r.id} className="p-4 bg-slate-50 border border-slate-100 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                    <div>
+                                        <h3 className="font-bold text-slate-900">{r.name}</h3>
+                                        <p className="text-xs text-slate-500">{r.address}</p>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        {editingId === r.id ? (
+                                            <div className="flex items-center gap-2">
+                                                <input
+                                                    type="text"
+                                                    value={newCategory}
+                                                    onChange={(e) => setNewCategory(e.target.value)}
+                                                    className="bg-white border border-slate-300 rounded-lg px-3 py-1 text-sm w-40"
+                                                    autoFocus
+                                                />
+                                                <button
+                                                    onClick={() => handleSaveCategory(r)}
+                                                    className="bg-green-600 text-white px-3 py-1 rounded-lg text-xs font-bold hover:bg-green-700"
+                                                >
+                                                    Save
+                                                </button>
+                                                <button
+                                                    onClick={() => setEditingId(null)}
+                                                    className="bg-slate-200 text-slate-600 px-3 py-1 rounded-lg text-xs font-bold hover:bg-slate-300"
+                                                >
+                                                    Cancel
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <span className="text-xs font-bold bg-slate-200 text-slate-600 px-2 py-1 rounded">
+                                                    {r.category}
+                                                </span>
+                                                <button
+                                                    onClick={() => handleStartEdit(r)}
+                                                    className="text-blue-600 hover:text-blue-800 text-xs font-bold underline"
+                                                >
+                                                    Edit Category
+                                                </button>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'approvals' && (
                     <div className="space-y-6">
                         <div className="bg-white/80 backdrop-blur-md border border-slate-200 rounded-2xl sm:rounded-3xl p-4 sm:p-8 shadow-sm">
                             <h2 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-3">

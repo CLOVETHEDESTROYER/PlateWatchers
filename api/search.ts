@@ -77,7 +77,7 @@ const mapPlaceTypeToCategory = (type: string): string => {
         "cafe": "Cafes",
         "chinese_restaurant": "Chinese",
         "coffee_shop": "Coffee Shops",
-        "deli": "Dalis & Sandwiches",
+        "deli": "Delis & Sandwiches",
         "dessert_shop": "Dessert",
         "diner": "Diners",
         "donut_shop": "Donuts",

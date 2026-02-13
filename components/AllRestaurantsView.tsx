@@ -4,12 +4,14 @@ import { Restaurant } from '../types';
 interface AllRestaurantsViewProps {
     restaurants: Restaurant[];
     onBack: () => void;
+    onSuggest?: () => void;
 }
 
-const AllRestaurantsView: React.FC<AllRestaurantsViewProps> = ({ restaurants, onBack }) => {
+const AllRestaurantsView: React.FC<AllRestaurantsViewProps> = ({ restaurants, onBack, onSuggest }) => {
     const [localSearch, setLocalSearch] = React.useState('');
 
     // Group restaurants by category and search
+    // ... (rest of useMemo logic unchanged)
     const grouped = useMemo((): Record<string, Restaurant[]> => {
         const groups: Record<string, Restaurant[]> = {};
         const query = localSearch.toLowerCase().trim();
@@ -81,8 +83,16 @@ const AllRestaurantsView: React.FC<AllRestaurantsViewProps> = ({ restaurants, on
 
                 <div className="bg-white/80 backdrop-blur-md border border-slate-200 rounded-3xl p-8 shadow-sm">
                     {Object.keys(grouped).length === 0 ? (
-                        <div className="text-center py-20 text-slate-400">
-                            {localSearch ? `No results for "${localSearch}"` : "No restaurants found."}
+                        <div className="text-center py-20 text-slate-400 flex flex-col items-center gap-4">
+                            <p>{localSearch ? `No results for "${localSearch}"` : "No restaurants found."}</p>
+                            {onSuggest && (
+                                <button
+                                    onClick={onSuggest}
+                                    className="px-6 py-2 bg-orange-600 text-white rounded-xl font-bold hover:bg-orange-700 transition-colors shadow-lg shadow-orange-200"
+                                >
+                                    + Suggest a New Restaurant
+                                </button>
+                            )}
                         </div>
                     ) : (
                         <div className="space-y-12">
