@@ -1,5 +1,17 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { User, onAuthStateChanged, signInWithPopup, signOut, signInWithEmailAndPassword, sendPasswordResetEmail, createUserWithEmailAndPassword } from "firebase/auth";
+import {
+    User,
+    onAuthStateChanged,
+    signInWithPopup,
+    signInWithRedirect,
+    getRedirectResult,
+    signOut,
+    signInWithEmailAndPassword,
+    sendPasswordResetEmail,
+    createUserWithEmailAndPassword,
+    browserLocalPersistence,
+    setPersistence
+} from "firebase/auth";
 import { auth, facebookProvider, googleProvider } from "../firebase";
 
 interface AuthContextType {
@@ -28,6 +40,17 @@ const AuthContext = createContext<AuthContextType>({
     error: null,
 });
 
+// Detect mobile browsers and PWAs where popups don't work
+const isMobile = (): boolean => {
+    if (typeof window === 'undefined') return false;
+    // Check if running as a PWA (standalone mode)
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+        || (window.navigator as any).standalone === true;
+    if (isStandalone) return true;
+    // Check for mobile user agent
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+};
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null);
     const [isAdmin, setIsAdmin] = useState(false);
@@ -37,8 +60,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Diagnostics and Admin logic
     useEffect(() => {
         if (user) {
-
-
             // Hardcoded Admin Email
             const ADMIN_EMAIL = 'analoguepro@gmail.com';
             const isAdminByEmail = user.email === ADMIN_EMAIL;
@@ -57,6 +78,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setLoading(false);
             return;
         }
+
+        // Ensure persistence is set to LOCAL (survives page reloads & PWA restarts)
+        setPersistence(auth, browserLocalPersistence).catch(() => { });
+
+        // Handle redirect result on app load (for mobile auth)
+        getRedirectResult(auth)
+            .then((result) => {
+                if (result?.user) {
+                    setUser(result.user);
+                }
+            })
+            .catch((err) => {
+                if (err.code === 'auth/account-exists-with-different-credential') {
+                    setError("An account already exists with the same email. Try a different sign-in method.");
+                }
+            });
+
         const unsubscribe = onAuthStateChanged(auth, (user) => {
             setUser(user);
             setLoading(false);
@@ -68,16 +106,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setError(null);
         try {
             if (!auth) throw new Error("Firebase Auth not initialized");
-            await signInWithPopup(auth, facebookProvider);
+
+            if (isMobile()) {
+                // Mobile: use redirect (popups are blocked on mobile browsers & PWAs)
+                await signInWithRedirect(auth, facebookProvider);
+                // Page will redirect — no code runs after this
+            } else {
+                // Desktop: use popup (faster, no page reload)
+                await signInWithPopup(auth, facebookProvider);
+            }
         } catch (err: any) {
             console.error("Facebook Login failed", err);
-            // Friendly messaging for common errors
             if (err.code === 'auth/account-exists-with-different-credential') {
                 setError("An account already exists with the same email address but different sign-in credentials. Sign in using a provider associated with this email address.");
             } else if (err.code === 'auth/popup-closed-by-user') {
                 // Ignore
+            } else if (err.code === 'auth/popup-blocked') {
+                // Popup blocked — fall back to redirect
+                try {
+                    await signInWithRedirect(auth!, facebookProvider);
+                } catch { }
             } else {
-                setError("Failed to log in with Facebook. Please check console.");
+                setError("Failed to log in with Facebook. Please try again.");
             }
         }
     };
@@ -86,10 +136,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setError(null);
         try {
             if (!auth) throw new Error("Firebase Auth not initialized");
-            await signInWithPopup(auth, googleProvider);
+
+            if (isMobile()) {
+                await signInWithRedirect(auth, googleProvider);
+            } else {
+                await signInWithPopup(auth, googleProvider);
+            }
         } catch (err: any) {
             console.error("Google Login failed", err);
-            setError("Failed to log in with Google.");
+            if (err.code === 'auth/popup-blocked') {
+                try {
+                    await signInWithRedirect(auth!, googleProvider);
+                } catch { }
+            } else {
+                setError("Failed to log in with Google.");
+            }
         }
     };
 
