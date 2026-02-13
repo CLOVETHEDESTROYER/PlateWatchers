@@ -9,9 +9,10 @@ interface SuggestModalProps {
     location: string;
     onSuccess: (restaurant: Restaurant) => void;
     existingRestaurants: Restaurant[];
+    isAdmin?: boolean;
 }
 
-const SuggestModal: React.FC<SuggestModalProps> = ({ isOpen, onClose, location, onSuccess, existingRestaurants }) => {
+const SuggestModal: React.FC<SuggestModalProps> = ({ isOpen, onClose, location, onSuccess, existingRestaurants, isAdmin = false }) => {
     const [restaurantName, setRestaurantName] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -44,7 +45,7 @@ const SuggestModal: React.FC<SuggestModalProps> = ({ isOpen, onClose, location, 
             return;
         }
 
-        if (!checkRateLimit()) {
+        if (!isAdmin && !checkRateLimit()) {
             setError('Daily limit reached (3 suggestions per day). Please try again tomorrow.');
             return;
         }

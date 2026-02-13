@@ -14,6 +14,17 @@ export const saveRestaurant = async (restaurant: Restaurant) => {
         return;
     }
 
+    // Firestore rejects `undefined` values — strip them before saving
+    const cleanData = (obj: Record<string, any>): Record<string, any> => {
+        const cleaned: Record<string, any> = {};
+        for (const [key, value] of Object.entries(obj)) {
+            if (value !== undefined) {
+                cleaned[key] = value;
+            }
+        }
+        return cleaned;
+    };
+
     try {
         const restaurantRef = doc(db, COLLECTION_NAME, restaurant.id);
         const docSnap = await getDoc(restaurantRef);
@@ -21,19 +32,25 @@ export const saveRestaurant = async (restaurant: Restaurant) => {
         if (docSnap.exists()) {
             // If exists, ONLY update info fields, preserving stats
             const existing = docSnap.data();
-            await setDoc(restaurantRef, {
+            const merged = cleanData({
                 ...restaurant,
                 // Preserve existing stats if they exist
                 rating: existing.rating || restaurant.rating,
                 userRatingsTotal: existing.userRatingsTotal || restaurant.userRatingsTotal,
                 basePoints: existing.basePoints || restaurant.basePoints,
-                source: existing.source || restaurant.source,
-                submittedAt: existing.submittedAt || restaurant.submittedAt
-            }, { merge: true });
+                source: existing.source || restaurant.source || 'search',
+                submittedAt: existing.submittedAt || restaurant.submittedAt || Date.now()
+            });
+            await setDoc(restaurantRef, merged, { merge: true });
             console.log(`Restaurant updated (stats preserved): ${restaurant.name}`);
         } else {
-            // New restaurant? Save everything
-            await setDoc(restaurantRef, restaurant, { merge: true });
+            // New restaurant — clean and save
+            const cleaned = cleanData({
+                ...restaurant,
+                source: restaurant.source || 'search',
+                submittedAt: restaurant.submittedAt || Date.now()
+            });
+            await setDoc(restaurantRef, cleaned, { merge: true });
             console.log(`New restaurant saved: ${restaurant.name}`);
         }
     } catch (error) {
@@ -41,6 +58,7 @@ export const saveRestaurant = async (restaurant: Restaurant) => {
         throw error;
     }
 };
+
 
 /**
  * Deletes a single restaurant from Firestore.

@@ -213,6 +213,8 @@ export default async function handler(req: any, res: any) {
                     userRatingsTotal: Math.floor(Math.random() * 1000) + 100,
                     googleMapsUri: `https://www.google.com/maps/search/${encodeURIComponent(safeName + " " + (restaurant.address || location))}`,
                     basePoints: 100,
+                    source: 'search',
+                    submittedAt: Date.now(),
                     sourceUrl: `https://www.google.com/maps/search/${encodeURIComponent(safeName + " " + location)}`,
                     ...(lat && { latitude: lat }),
                     ...(lng && { longitude: lng })

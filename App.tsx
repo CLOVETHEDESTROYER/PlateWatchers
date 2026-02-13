@@ -667,19 +667,7 @@ const App: React.FC = () => {
                 </p>
               </div>
 
-              {/* Mobile Search - Only visible on small screens */}
-              <div className="w-full md:hidden">
-                <form onSubmit={(e) => { e.preventDefault(); handleSearch(); }} className="relative">
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search BBQ, Pizza, Burgers..."
-                    className="w-full pl-12 pr-6 py-4 bg-white border border-slate-100 rounded-3xl shadow-sm outline-none transition-all font-medium text-lg"
-                  />
-                  <span className="absolute left-5 top-1/2 -translate-y-1/2 text-xl">🔍</span>
-                </form>
-              </div>
+              {/* Mobile Search removed - using fixed search bar instead */}
             </div>
 
             {/* Best This Week Widget - Moved Above Categories */}
@@ -754,13 +742,13 @@ const App: React.FC = () => {
                 <div className="text-slate-300 font-black text-6xl mb-4">No Matches</div>
                 <p className="text-slate-500 font-medium mb-8">
                   {searchQuery
-                    ? `No local results for "${searchQuery}". Try a different term or search online.`
-                    : "No restaurants found in the database. Click Hydrate."
+                    ? `No local results for "${searchQuery}". Try a different term or suggest it!`
+                    : "No restaurants found in the database."
                   }
                 </p>
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
                   {searchQuery && (
-                    <button onClick={() => handleSearch()} className="bg-orange-600 text-white px-8 py-4 rounded-xl font-black text-lg shadow-xl hover:bg-orange-700 transition-all active:scale-95">Search Online for "{searchQuery}"</button>
+                    <button onClick={() => setIsSuggestModalOpen(true)} className="bg-orange-600 text-white px-8 py-4 rounded-xl font-black text-lg shadow-xl hover:bg-orange-700 transition-all active:scale-95">Suggest "{searchQuery}"</button>
                   )}
                   {isAdmin && (
                     <button onClick={() => setView('admin')} className="bg-slate-900 text-white px-8 py-4 rounded-xl font-black text-lg shadow-xl hover:bg-slate-800 transition-all active:scale-95">Go to Admin Console</button>
@@ -877,7 +865,9 @@ const App: React.FC = () => {
         onClose={() => setIsSuggestModalOpen(false)}
         location={location}
         existingRestaurants={data?.restaurants || []}
+        isAdmin={isAdmin}
         onSuccess={() => {
+
           // Success is handled by the "Shared" message in the modal
         }}
       />
