@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { validateRestaurant, ValidationResult } from '../services/geminiService';
+import { searchCandidates } from '../services/geminiService';
 import { saveSuggestion } from '../services/restaurantService';
 import { Restaurant } from '../types';
 
@@ -12,12 +12,16 @@ interface SuggestModalProps {
     isAdmin?: boolean;
 }
 
+type Step = 'search' | 'results' | 'success';
+
 const SuggestModal: React.FC<SuggestModalProps> = ({ isOpen, onClose, location, onSuccess, existingRestaurants, isAdmin = false }) => {
     const [restaurantName, setRestaurantName] = useState('');
-    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isSearching, setIsSearching] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [success, setSuccess] = useState(false);
-    const [lastSuggestedName, setLastSuggestedName] = useState('');
+    const [step, setStep] = useState<Step>('search');
+    const [candidates, setCandidates] = useState<Restaurant[]>([]);
+    const [selectedName, setSelectedName] = useState('');
 
     // Rate limiting: max 3 submissions per 24 hours
     const checkRateLimit = (): boolean => {
@@ -37,7 +41,7 @@ const SuggestModal: React.FC<SuggestModalProps> = ({ isOpen, onClose, location, 
         return true;
     };
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleSearch = async (e: React.FormEvent) => {
         e.preventDefault();
 
         if (!restaurantName.trim()) {
@@ -45,143 +49,242 @@ const SuggestModal: React.FC<SuggestModalProps> = ({ isOpen, onClose, location, 
             return;
         }
 
+        setIsSearching(true);
+        setError(null);
+
+        try {
+            const result = await searchCandidates(restaurantName, location);
+
+            if (result.error && (!result.candidates || result.candidates.length === 0)) {
+                setError(result.error);
+                setIsSearching(false);
+                return;
+            }
+
+            if (!result.candidates || result.candidates.length === 0) {
+                setError(`No restaurants matching "${restaurantName}" found on Google Maps in ${location}. Check the spelling and try again.`);
+                setIsSearching(false);
+                return;
+            }
+
+            setCandidates(result.candidates);
+            setStep('results');
+        } catch (err: any) {
+            setError('Something went wrong. Please try again.');
+            console.error('Search error:', err);
+        } finally {
+            setIsSearching(false);
+        }
+    };
+
+    const handleSelect = async (candidate: Restaurant) => {
+        // Rate limit check (skip for admin)
         if (!isAdmin && !checkRateLimit()) {
             setError('Daily limit reached (3 suggestions per day). Please try again tomorrow.');
             return;
         }
 
+        // Check if already on leaderboard
+        const exists = existingRestaurants.some(
+            r => r.id === candidate.id || r.name.toLowerCase() === candidate.name.toLowerCase()
+        );
+        if (exists) {
+            setError(`"${candidate.name}" is already on the leaderboard!`);
+            return;
+        }
 
-        setIsSubmitting(true);
+        setIsSaving(true);
         setError(null);
 
         try {
-            // Local check 1: Exact Name Match (case-insensitive)
-            const exists = existingRestaurants.some(r => r.name.toLowerCase() === restaurantName.toLowerCase().trim());
-            if (exists) {
-                setError(`"${restaurantName}" is already on the leaderboard!`);
-                setIsSubmitting(false);
-                return;
-            }
+            await saveSuggestion(candidate);
+            setSelectedName(candidate.name);
+            setStep('success');
+            onSuccess(candidate);
 
-            const result: ValidationResult = await validateRestaurant(restaurantName, location);
-
-            if (!result.valid || !result.restaurant) {
-                setError(result.error || 'Restaurant not found. Make sure it exists on Google Maps in ' + location);
-                setIsSubmitting(false);
-                return;
-            }
-
-            // Local check 2: ID Match (Deterministic ID match)
-            const idExists = existingRestaurants.some(r => r.id === result.restaurant?.id);
-            if (idExists) {
-                setError(`"${result.restaurant.name}" is already on the leaderboard!`);
-                setIsSubmitting(false);
-                return;
-            }
-
-            // Save to Suggestions collection instead of main restaurants
-            await saveSuggestion(result.restaurant);
-
-            setSuccess(true);
-            setLastSuggestedName(result.restaurant.name);
-            setRestaurantName('');
-
-            // Notify parent of success
-            onSuccess(result.restaurant);
-
-            // Close modal after brief delay
+            // Auto-close after delay
             setTimeout(() => {
-                setSuccess(false);
-                onClose();
-            }, 2000);
-
+                handleClose();
+            }, 2500);
         } catch (err: any) {
-            setError('Something went wrong. Please try again.');
-            console.error('Submission error:', err);
+            setError('Failed to save suggestion. Please try again.');
+            console.error('Save error:', err);
         } finally {
-            setIsSubmitting(false);
+            setIsSaving(false);
         }
+    };
+
+    const handleBack = () => {
+        setStep('search');
+        setCandidates([]);
+        setError(null);
     };
 
     const handleClose = () => {
         setRestaurantName('');
         setError(null);
-        setSuccess(false);
+        setStep('search');
+        setCandidates([]);
+        setSelectedName('');
         onClose();
     };
 
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-t-[24px] sm:rounded-3xl shadow-2xl max-w-md w-full p-5 sm:p-8 relative">
-                {/* Close button */}
-                <button
-                    onClick={handleClose}
-                    className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 text-2xl font-bold"
-                >
-                    ×
-                </button>
-
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+            <div className="bg-white rounded-t-[24px] sm:rounded-3xl shadow-2xl max-w-lg w-full relative max-h-[90vh] flex flex-col">
                 {/* Header */}
-                <div className="mb-6">
-                    <h2 className="text-2xl font-black text-slate-900 mb-2">Suggest a Restaurant</h2>
-                    <p className="text-slate-500 text-sm">
-                        Know a great spot in {location}? Add it to the leaderboard!
-                    </p>
+                <div className="p-5 sm:p-8 pb-0 shrink-0">
+                    <button
+                        onClick={handleClose}
+                        className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 text-2xl font-bold z-10"
+                    >
+                        ×
+                    </button>
+
+                    <div className="mb-4">
+                        <h2 className="text-2xl font-black text-slate-900 mb-1">
+                            {step === 'results' ? 'Select Restaurant' : 'Suggest a Restaurant'}
+                        </h2>
+                        <p className="text-slate-500 text-sm">
+                            {step === 'results'
+                                ? `Found ${candidates.length} result${candidates.length !== 1 ? 's' : ''} for "${restaurantName}"`
+                                : `Know a great spot in ${location}? Search for it below!`
+                            }
+                        </p>
+                    </div>
                 </div>
 
-                {success ? (
-                    <div className="text-center py-8">
-                        <div className="text-6xl mb-4">🎉</div>
-                        <p className="text-xl font-bold text-orange-600">Suggestion Shared!</p>
-                        <p className="text-slate-500 text-sm mt-2">Thanks! An admin will review "{lastSuggestedName}" shortly to ensure it's in Albuquerque.</p>
-                    </div>
-                ) : (
-                    <form onSubmit={handleSubmit}>
-                        <div className="mb-6">
-                            <label className="block text-sm font-bold text-slate-700 mb-2">
-                                Restaurant Name
-                            </label>
-                            <input
-                                type="text"
-                                value={restaurantName}
-                                onChange={(e) => setRestaurantName(e.target.value)}
-                                placeholder="e.g., Golden Pride BBQ"
-                                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-4 focus:ring-orange-100 focus:border-orange-400 outline-none transition-all text-lg"
-                                disabled={isSubmitting}
-                            />
-                            <p className="text-xs text-slate-400 mt-2">
-                                Must be on Google Maps in {location}
+                {/* Content */}
+                <div className="overflow-y-auto flex-1 px-5 sm:px-8 pb-5 sm:pb-8">
+                    {step === 'success' ? (
+                        <div className="text-center py-8">
+                            <div className="text-6xl mb-4">🎉</div>
+                            <p className="text-xl font-bold text-orange-600">Suggestion Shared!</p>
+                            <p className="text-slate-500 text-sm mt-2">
+                                Thanks! An admin will review "{selectedName}" shortly.
                             </p>
                         </div>
+                    ) : step === 'results' ? (
+                        <div>
+                            {/* Back button */}
+                            <button
+                                onClick={handleBack}
+                                className="flex items-center gap-1 text-slate-500 hover:text-slate-700 text-sm font-bold mb-4 transition-colors"
+                            >
+                                ← Search Again
+                            </button>
 
-                        {error && (
-                            <div className="mb-4 p-4 bg-red-50 border border-red-100 rounded-xl text-red-600 text-sm">
-                                {error}
-                            </div>
-                        )}
-
-                        <button
-                            type="submit"
-                            disabled={isSubmitting}
-                            className="w-full bg-orange-600 text-white py-4 rounded-xl font-black text-lg hover:bg-orange-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                        >
-                            {isSubmitting ? (
-                                <>
-                                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                                    Verifying on Google Maps...
-                                </>
-                            ) : (
-                                'Add Restaurant'
+                            {error && (
+                                <div className="mb-4 p-4 bg-red-50 border border-red-100 rounded-xl text-red-600 text-sm">
+                                    {error}
+                                </div>
                             )}
-                        </button>
-                    </form>
-                )}
 
-                <p className="text-center text-xs text-slate-400 mt-6">
-                    Submissions are verified against Google Maps to ensure accuracy.
-                </p>
+                            {/* Candidate list */}
+                            <div className="space-y-3">
+                                {candidates.map((candidate, i) => (
+                                    <div
+                                        key={candidate.id || i}
+                                        className="border border-slate-200 rounded-2xl p-4 hover:border-orange-300 hover:shadow-md transition-all"
+                                    >
+                                        <div className="flex justify-between items-start gap-3">
+                                            <div className="flex-1 min-w-0">
+                                                <h3 className="font-black text-slate-900 text-base leading-tight">
+                                                    {candidate.name}
+                                                </h3>
+                                                <p className="text-slate-500 text-sm mt-1 flex items-center gap-1.5">
+                                                    <span>📍</span>
+                                                    <span className="truncate">{candidate.address}</span>
+                                                </p>
+                                                <div className="flex items-center gap-3 mt-2">
+                                                    <span className="text-xs font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full">
+                                                        {candidate.category}
+                                                    </span>
+                                                    {(candidate as any).rating > 0 && (
+                                                        <span className="text-xs text-slate-500">
+                                                            ⭐ {(candidate as any).rating}
+                                                            {(candidate as any).reviewCount > 0 && (
+                                                                <span className="text-slate-400"> ({(candidate as any).reviewCount})</span>
+                                                            )}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                {(candidate as any).detail && (
+                                                    <p className="text-slate-400 text-xs mt-1.5">{(candidate as any).detail}</p>
+                                                )}
+                                            </div>
+
+                                            <button
+                                                onClick={() => handleSelect(candidate)}
+                                                disabled={isSaving}
+                                                className="shrink-0 bg-orange-600 text-white px-4 py-2.5 rounded-xl font-bold text-sm hover:bg-orange-700 transition-all active:scale-95 disabled:opacity-50"
+                                            >
+                                                {isSaving ? '...' : 'Select'}
+                                            </button>
+                                        </div>
+
+                                        {/* Google Maps link */}
+                                        <a
+                                            href={candidate.googleMapsUri || `https://www.google.com/maps/search/${encodeURIComponent(candidate.name + ' ' + candidate.address)}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-flex items-center gap-1 text-xs text-blue-500 hover:text-blue-700 mt-2 font-medium"
+                                        >
+                                            🗺️ View on Google Maps
+                                        </a>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ) : (
+                        <form onSubmit={handleSearch}>
+                            <div className="mb-6">
+                                <label className="block text-sm font-bold text-slate-700 mb-2">
+                                    Restaurant Name
+                                </label>
+                                <input
+                                    type="text"
+                                    value={restaurantName}
+                                    onChange={(e) => setRestaurantName(e.target.value)}
+                                    placeholder="e.g., Rose Garden, Golden Pride..."
+                                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-4 focus:ring-orange-100 focus:border-orange-400 outline-none transition-all text-lg"
+                                    disabled={isSearching}
+                                    autoFocus
+                                />
+                                <p className="text-xs text-slate-400 mt-2">
+                                    We'll search Google Maps in {location} and show you what we find.
+                                </p>
+                            </div>
+
+                            {error && (
+                                <div className="mb-4 p-4 bg-red-50 border border-red-100 rounded-xl text-red-600 text-sm">
+                                    {error}
+                                </div>
+                            )}
+
+                            <button
+                                type="submit"
+                                disabled={isSearching}
+                                className="w-full bg-orange-600 text-white py-4 rounded-xl font-black text-lg hover:bg-orange-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                            >
+                                {isSearching ? (
+                                    <>
+                                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                        Searching Google Maps...
+                                    </>
+                                ) : (
+                                    '🔍 Search'
+                                )}
+                            </button>
+                        </form>
+                    )}
+
+                    <p className="text-center text-xs text-slate-400 mt-6">
+                        Results are sourced from Google Maps to ensure accuracy.
+                    </p>
+                </div>
             </div>
         </div>
     );

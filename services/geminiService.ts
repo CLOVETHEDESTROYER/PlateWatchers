@@ -27,21 +27,21 @@ export const fetchRestaurants = async (query: string, location: string, coords?:
 };
 
 /**
- * Result of restaurant validation
+ * Result of restaurant candidate search
  */
-export interface ValidationResult {
-  valid: boolean;
-  restaurant?: Restaurant;
+export interface CandidateResult {
+  candidates: Restaurant[];
   error?: string;
 }
 
 /**
- * Validates a user-submitted restaurant name via the secure serverless API route.
+ * Searches for restaurant candidates matching a name via the secure serverless API route.
+ * Returns multiple candidates for the user to choose from.
  */
-export const validateRestaurant = async (
+export const searchCandidates = async (
   restaurantName: string,
   location: string = "Albuquerque, New Mexico"
-): Promise<ValidationResult> => {
+): Promise<CandidateResult> => {
   try {
     const response = await fetch('/api/validate', {
       method: 'POST',
@@ -53,12 +53,12 @@ export const validateRestaurant = async (
 
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(errorData.error || 'Failed to validate restaurant via API');
+      throw new Error(errorData.error || 'Failed to search for restaurants via API');
     }
 
     return await response.json();
   } catch (error) {
-    console.error("Gemini Validation Proxy Error:", error);
-    return { valid: false, error: "Failed to validate restaurant. Please try again." };
+    console.error("Candidate Search Error:", error);
+    return { candidates: [], error: "Failed to search for restaurants. Please try again." };
   }
 };

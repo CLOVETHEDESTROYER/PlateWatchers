@@ -91,27 +91,38 @@ export default async function handler(req: any, res: any) {
         return res.status(500).json({ error: 'GEMINI_API_KEY not configured in Vercel settings.' });
     }
 
-    // Log key presence for debugging (first 4 chars only for security)
     console.log(`🔑 Key check: ${apiKey.substring(0, 4)}... (Total length: ${apiKey.length})`);
 
     const genAI = new GoogleGenerativeAI(apiKey);
 
     try {
-        console.log(`🔍 Validating restaurant: "${restaurantName}" in "${location}"`);
+        console.log(`🔍 Searching candidates for: "${restaurantName}" in "${location}"`);
 
-        const prompt = `Verify if "${restaurantName}" is a REAL restaurant, cafe, or similar food establishment in ${location}.
+        const prompt = `Search Google Maps for ALL restaurants, cafes, or food establishments matching "${restaurantName}" in ${location}.
 
 CRITICAL REQUIREMENTS:
-1. The place MUST have a verified listing on Google Maps.
-2. The place MUST be located strictly within Albuquerque, New Mexico. (No Santa Fe, Rio Rancho, Bernalillo, Los Lunas, etc.)
-3. The place must NOT be PERMANENTLY CLOSED. However, restaurants that are simply closed for the evening or have limited hours ARE STILL VALID. Do NOT reject a restaurant just because it is outside its current business hours.
-4. If you find MULTIPLE locations in Albuquerque, pick the most popular one (highest rated / most reviews).
-5. Use the EXACT address as listed on Google Maps. Do NOT guess or approximate addresses.
+1. Search Google Maps for the query "${restaurantName}" in Albuquerque, New Mexico.
+2. Return ALL matching locations in Albuquerque — do NOT pick just one.
+3. Each result must NOT be PERMANENTLY CLOSED. Restaurants closed for the evening are STILL VALID.
+4. Only include places within Albuquerque, NM (no Santa Fe, Rio Rancho, Bernalillo, etc.)
+5. Use the EXACT name and EXACT street address as shown on Google Maps. Do NOT guess addresses.
+6. Include the Google Maps rating and review count if available.
 
-If the place is VERIFIED on Google Maps and meets ALL criteria, return this EXACT JSON:
-{"valid": true, "name": "Official Google Maps Name", "googlePlaceType": "place_type_from_list", "address": "Exact Full Street Address from Google Maps, Albuquerque, NM ZIP", "detail": "Brief description", "latitude": 35.xxxx, "longitude": -106.xxxx}
+Return a JSON array of ALL matches:
+[
+  {
+    "name": "Exact Google Maps Name",
+    "address": "Exact street address from Google Maps, Albuquerque, NM ZIP",
+    "googlePlaceType": "type_from_list",
+    "detail": "Brief description (cuisine type, vibe, etc.)",
+    "rating": 4.2,
+    "reviewCount": 382,
+    "latitude": 35.xxxx,
+    "longitude": -106.xxxx
+  }
+]
 
-Category MUST be one of these Google Place Types:
+"googlePlaceType" MUST be one of:
 "american_restaurant", "bakery", "bar", "bar_and_grill", "barbecue_restaurant",
 "brazilian_restaurant", "breakfast_restaurant", "brunch_restaurant",
 "cafe", "chinese_restaurant", "coffee_shop", "deli", "dessert_shop", "diner",
@@ -120,16 +131,13 @@ Category MUST be one of these Google Place Types:
 "mexican_restaurant", "pizza_restaurant", "seafood_restaurant", "steak_house",
 "sushi_restaurant", "thai_restaurant", "vegetarian_restaurant", "vietnamese_restaurant"
 
-If you cannot find a match on Google Maps, if it's PERMANENTLY closed, if it's outside Albuquerque, or if it's not a food establishment, return:
-{"valid": false, "reason": "Explanation of why it failed"}
+If NO matches are found in Albuquerque, return: []
+DO NOT include any text outside the JSON array. Use DOUBLE QUOTES only.`;
 
-IMPORTANT: Always include latitude and longitude for valid results.
-DO NOT include any text outside the JSON. Use DOUBLE QUOTES only.`;
-
-        // Attempt 1: With Google Search Tool (Experimental - uses v1beta)
+        // Attempt 1: With Google Search Tool (uses v1beta for grounded results)
         let text = "";
         try {
-            console.log("🛠️ Attempting validation WITH Google Search tool (v1beta)...");
+            console.log("🛠️ Attempting candidate search WITH Google Search tool (v1beta)...");
             const genAIBeta = new GoogleGenerativeAI(apiKey);
             const modelWithTools = genAIBeta.getGenerativeModel({
                 model: "gemini-2.5-flash",
@@ -140,8 +148,7 @@ DO NOT include any text outside the JSON. Use DOUBLE QUOTES only.`;
             text = result.response.text();
             console.log("✅ Tool Success.");
         } catch (toolError: any) {
-            console.warn("⚠️ Google Search tool failed or not supported, falling back to STABLE v1 model:", toolError.message);
-            // Attempt 2: Fallback to STABLE basic model without tools
+            console.warn("⚠️ Google Search tool failed, falling back to STABLE v1 model:", toolError.message);
             const genAIStable = new GoogleGenerativeAI(apiKey);
             const basicModel = genAIStable.getGenerativeModel({
                 model: "gemini-2.5-flash"
@@ -154,52 +161,61 @@ DO NOT include any text outside the JSON. Use DOUBLE QUOTES only.`;
 
         console.log("📄 AI Response:", text);
 
+        // Parse JSON array from response
         let cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();
-        const firstBrace = cleaned.indexOf('{');
-        const lastBrace = cleaned.lastIndexOf('}');
+        const firstBracket = cleaned.indexOf('[');
+        const lastBracket = cleaned.lastIndexOf(']');
 
-        if (firstBrace === -1 || lastBrace === -1) {
-            console.error("❌ Failed to parse JSON from AI response:", text);
-            return res.status(200).json({ valid: false, error: "Could not verify restaurant format. AI response was invalid JSON." });
+        if (firstBracket === -1 || lastBracket === -1) {
+            console.log("⚠️ No JSON array found in response");
+            return res.status(200).json({ candidates: [] });
         }
 
-        cleaned = cleaned.substring(firstBrace, lastBrace + 1);
-        const parseResult = JSON.parse(cleaned);
+        cleaned = cleaned.substring(firstBracket, lastBracket + 1);
+        const aiResults = JSON.parse(cleaned);
 
-        if (!parseResult.valid) {
-            return res.status(200).json({ valid: false, error: parseResult.reason || "Restaurant not found" });
+        if (!Array.isArray(aiResults) || aiResults.length === 0) {
+            return res.status(200).json({ candidates: [] });
         }
 
-        const idBase = `${parseResult.name}-${location}`.toLowerCase().trim();
-        const deterministicId = safeBtoa(idBase).replace(/[^a-zA-Z0-9]/g, '').slice(0, 24);
+        // Build candidate list, filtering by ABQ bounds
+        const candidates = aiResults
+            .map((r: any) => {
+                const lat = parseFloat(r.latitude) || undefined;
+                const lng = parseFloat(r.longitude) || undefined;
+                const addr = r.address || '';
 
-        // Server-side geo validation — catches AI mistakes
-        const lat = parseFloat(parseResult.latitude) || undefined;
-        const lng = parseFloat(parseResult.longitude) || undefined;
-        const addr = parseResult.address || '';
+                if (!isInABQ(lat, lng, addr)) {
+                    console.log(`📍 Skipping non-ABQ candidate: ${r.name} (${addr})`);
+                    return null;
+                }
 
-        if (!isInABQ(lat, lng, addr)) {
-            console.log(`📍 Rejecting non-ABQ suggestion: ${parseResult.name} (${addr})`);
-            return res.status(200).json({ valid: false, error: `"${parseResult.name}" does not appear to be in Albuquerque.` });
-        }
+                const safeName = r.name || "Unknown Spot";
+                const idBase = `${safeName}-${location}`.toLowerCase().trim();
+                const deterministicId = safeBtoa(idBase).replace(/[^a-zA-Z0-9]/g, '').slice(0, 24);
 
-        const restaurant = {
-            id: deterministicId,
-            name: parseResult.name,
-            category: mapPlaceTypeToCategory(parseResult.googlePlaceType || "Restaurants"),
-            googlePlaceType: parseResult.googlePlaceType,
-            address: parseResult.address || parseResult.detail || "Albuquerque, NM",
-            rating: 4.5,
-            userRatingsTotal: 0,
-            googleMapsUri: `https://www.google.com/maps/search/${encodeURIComponent(parseResult.name + " " + (parseResult.address || location))}`,
-            basePoints: 100,
-            source: 'user-submitted',
-            submittedAt: Date.now(),
-            ...(lat && { latitude: lat }),
-            ...(lng && { longitude: lng })
-        };
+                return {
+                    id: deterministicId,
+                    name: safeName,
+                    category: mapPlaceTypeToCategory(r.googlePlaceType || ""),
+                    googlePlaceType: r.googlePlaceType,
+                    address: addr || "Albuquerque, NM",
+                    detail: r.detail || "",
+                    rating: r.rating || 0,
+                    reviewCount: r.reviewCount || 0,
+                    userRatingsTotal: r.reviewCount || 0,
+                    googleMapsUri: `https://www.google.com/maps/search/${encodeURIComponent(safeName + " " + (addr || location))}`,
+                    basePoints: 100,
+                    source: 'user-submitted',
+                    submittedAt: Date.now(),
+                    ...(lat && { latitude: lat }),
+                    ...(lng && { longitude: lng })
+                };
+            })
+            .filter(Boolean);
 
-        return res.status(200).json({ valid: true, restaurant });
+        console.log(`✅ Returning ${candidates.length} candidates for "${restaurantName}"`);
+        return res.status(200).json({ candidates });
 
     } catch (error: any) {
         console.error("❌ Fatal Validation Error in Serverless Function:", {
@@ -209,8 +225,8 @@ DO NOT include any text outside the JSON. Use DOUBLE QUOTES only.`;
             code: error.code
         });
         return res.status(500).json({
-            valid: false,
-            error: "Failed to validate restaurant. Internal server error.",
+            candidates: [],
+            error: "Failed to search for restaurants. Internal server error.",
             details: error.message
         });
     }
