@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Coordinates, Restaurant, SearchResult } from '../types';
+import { Coordinates, Restaurant, SearchResult, CategoryRequest } from '../types';
 
 interface AdminDashboardProps {
     onBack: () => void;
@@ -13,6 +13,8 @@ interface AdminDashboardProps {
     isSeeding: boolean;
     seedingStatus: string;
     loading: boolean;
+    categoryRequests: CategoryRequest[];
+    onResolveRequest: (req: CategoryRequest, approve: boolean) => Promise<void>;
 }
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({
@@ -26,9 +28,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     restaurants,
     isSeeding,
     seedingStatus,
-    loading
+    loading,
+    categoryRequests,
+    onResolveRequest
 }) => {
-    const [activeTab, setActiveTab] = useState<'tools' | 'approvals' | 'edit'>('approvals');
+    const [activeTab, setActiveTab] = useState<'tools' | 'approvals' | 'edit' | 'requests'>('approvals');
     const [editSearch, setEditSearch] = useState('');
     const [editingId, setEditingId] = useState<string | null>(null);
     const [newCategory, setNewCategory] = useState('');
@@ -80,6 +84,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             className={`px-3 py-2 sm:px-6 sm:py-2 rounded-xl text-[10px] sm:text-sm font-black uppercase tracking-widest transition-all whitespace-nowrap ${activeTab === 'approvals' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
                         >
                             Approvals {suggestions.length > 0 && <span className="ml-2 bg-orange-600 text-white px-2 py-0.5 rounded-full text-[10px]">{suggestions.length}</span>}
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('requests')}
+                            className={`px-3 py-2 sm:px-6 sm:py-2 rounded-xl text-[10px] sm:text-sm font-black uppercase tracking-widest transition-all whitespace-nowrap ${activeTab === 'requests' ? 'bg-white text-purple-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                        >
+                            Requests {categoryRequests.length > 0 && <span className="ml-2 bg-purple-600 text-white px-2 py-0.5 rounded-full text-[10px]">{categoryRequests.length}</span>}
                         </button>
                         <button
                             onClick={() => setActiveTab('edit')}
@@ -291,6 +301,69 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                                 <button
                                                     onClick={() => onApprove(suggestion)}
                                                     className="px-8 py-2 bg-orange-600 text-white rounded-xl font-black text-xs uppercase hover:bg-orange-700 transition-all shadow-md active:scale-95"
+                                                    disabled={loading}
+                                                >
+                                                    Approve
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+                {activeTab === 'requests' && (
+                    <div className="space-y-6">
+                        <div className="bg-white/80 backdrop-blur-md border border-slate-200 rounded-2xl sm:rounded-3xl p-4 sm:p-8 shadow-sm">
+                            <h2 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-3">
+                                <span className="text-2xl">🗳️</span> Category Change Requests
+                            </h2>
+
+                            {categoryRequests.length === 0 ? (
+                                <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                                    <p className="text-slate-400 font-bold uppercase tracking-widest text-sm">No pending requests</p>
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-1 gap-4">
+                                    {categoryRequests.map((req) => (
+                                        <div key={req.id} className="p-6 bg-white border border-slate-100 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-6 hover:shadow-md transition-all">
+                                            <div className="flex-1">
+                                                <div className="flex items-center gap-2 mb-2">
+                                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                                                        Requested by {req.userName}
+                                                    </span>
+                                                    <span className="text-[10px] text-slate-300">•</span>
+                                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                                                        {new Date(req.submittedAt).toLocaleDateString()}
+                                                    </span>
+                                                </div>
+                                                <h3 className="text-lg font-black text-slate-800 mb-1">{req.restaurantName}</h3>
+                                                <div className="flex items-center gap-3 text-sm font-medium">
+                                                    <span className="text-slate-500 line-through decoration-red-400/50">{req.currentCategory}</span>
+                                                    <span className="text-slate-300">→</span>
+                                                    <span className="text-purple-600 font-bold bg-purple-50 px-2 py-0.5 rounded">{req.requestedCategory}</span>
+                                                </div>
+                                            </div>
+                                            <div className="flex gap-3">
+                                                <button
+                                                    onClick={() => {
+                                                        if (confirm("Reject this request?")) {
+                                                            onResolveRequest(req, false);
+                                                        }
+                                                    }}
+                                                    className="px-6 py-2 bg-slate-100 text-slate-600 rounded-xl font-black text-xs uppercase hover:bg-red-50 hover:text-red-600 transition-all active:scale-95"
+                                                    disabled={loading}
+                                                >
+                                                    Reject
+                                                </button>
+                                                <button
+                                                    onClick={() => {
+                                                        if (confirm(`Approve change to "${req.requestedCategory}"?\n\nThis will update the restaurant and reset any votes for the old category.`)) {
+                                                            onResolveRequest(req, true);
+                                                        }
+                                                    }}
+                                                    className="px-8 py-2 bg-purple-600 text-white rounded-xl font-black text-xs uppercase hover:bg-purple-700 transition-all shadow-md active:scale-95"
                                                     disabled={loading}
                                                 >
                                                     Approve

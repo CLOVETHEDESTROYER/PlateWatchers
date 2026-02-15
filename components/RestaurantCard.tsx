@@ -12,6 +12,7 @@ interface RestaurantCardProps {
   userScore: number;
   globalCommunityPoints?: number;
   searchTerm?: string;
+  onRequestEdit?: (r: Restaurant) => void;
 }
 
 const RestaurantCard: React.FC<RestaurantCardProps> = ({
@@ -23,7 +24,8 @@ const RestaurantCard: React.FC<RestaurantCardProps> = ({
   onVoteOverall,
   userScore,
   globalCommunityPoints,
-  searchTerm = ''
+  searchTerm = '',
+  onRequestEdit
 }) => {
   const [showCopied, setShowCopied] = useState(false);
 
@@ -145,6 +147,14 @@ const RestaurantCard: React.FC<RestaurantCardProps> = ({
 
           <button onClick={handleShare} className={`text-[10px] font-black uppercase tracking-widest flex items-center ${showCopied ? 'text-green-500' : 'text-slate-400 hover:text-orange-500'}`}>
             {showCopied ? 'Copied!' : 'Share'}
+          </button>
+
+          <button
+            onClick={() => onRequestEdit && onRequestEdit(restaurant)}
+            className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-blue-600 transition-colors"
+            title="Wrong category? Suggest an edit."
+          >
+            Suggest Edit
           </button>
         </div>
 

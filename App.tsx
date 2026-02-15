@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { fetchRestaurants } from './services/geminiService';
-import { saveRestaurantsBatch, getSavedRestaurants, deleteUserVotes, approveSuggestion, rejectSuggestion, getPendingSuggestions, deleteRestaurant, updateRestaurantCategory, fixCategoryTypos, wipeAllRestaurants } from './services/restaurantService';
-import { Restaurant, UserVoteRecord, SearchResult, Coordinates, CategoryVote } from './types';
+import { saveRestaurantsBatch, getSavedRestaurants, deleteUserVotes, approveSuggestion, rejectSuggestion, getPendingSuggestions, deleteRestaurant, updateRestaurantCategory, fixCategoryTypos, wipeAllRestaurants, requestCategoryEdit, getCategoryRequests, resolveCategoryRequest } from './services/restaurantService';
+import { Restaurant, UserVoteRecord, SearchResult, Coordinates, CategoryVote, CategoryRequest } from './types';
 import RestaurantCard from './components/RestaurantCard';
 import SuggestModal from './components/SuggestModal';
 import AllRestaurantsView from './components/AllRestaurantsView';
@@ -34,7 +34,10 @@ const App: React.FC = () => {
   const [isAdminLoginOpen, setIsAdminLoginOpen] = useState(false);
   const [view, setView] = useState<'dashboard' | 'list' | 'admin'>('dashboard');
   const [pendingSuggestions, setPendingSuggestions] = useState<Restaurant[]>([]);
+  const [categoryRequests, setCategoryRequests] = useState<CategoryRequest[]>([]);
   const [isTutorialOpen, setIsTutorialOpen] = useState(false);
+  const [isEditRequestOpen, setIsEditRequestOpen] = useState(false);
+  const [editRequestRestaurant, setEditRequestRestaurant] = useState<Restaurant | null>(null);
 
   // Auth gate for suggesting: require login first
   const handleSuggestClick = useCallback(() => {
@@ -449,11 +452,22 @@ const App: React.FC = () => {
     }
   }, [isAdmin]);
 
+  const fetchCategoryRequestsData = useCallback(async () => {
+    if (!isAdmin) return;
+    try {
+      const reqs = await getCategoryRequests();
+      setCategoryRequests(reqs as CategoryRequest[]);
+    } catch (e) {
+      console.error("Failed to fetch category requests", e);
+    }
+  }, [isAdmin]);
+
   useEffect(() => {
     if (view === 'admin') {
       fetchSuggestions();
+      fetchCategoryRequestsData();
     }
-  }, [view, fetchSuggestions]);
+  }, [view, fetchSuggestions, fetchCategoryRequestsData]);
 
   const handleApproveSuggestion = async (restaurant: Restaurant) => {
     setLoading(true);
@@ -481,6 +495,28 @@ const App: React.FC = () => {
       await fetchSuggestions();
     } catch (e) {
       console.error("Rejection failed", e);
+    }
+  };
+
+  const handleResolveRequest = async (req: CategoryRequest, approve: boolean) => {
+    setLoading(true);
+    try {
+      await resolveCategoryRequest(req.id, approve, req.restaurantId, req.requestedCategory, req.currentCategory);
+      await fetchCategoryRequestsData();
+      if (approve) {
+        // Refresh main data because a category changed
+        const saved = await getSavedRestaurants();
+        const cats = new Set<string>();
+        saved.forEach(r => cats.add(r.category));
+        setData({
+          restaurants: saved,
+          categories: Array.from(cats).sort()
+        });
+      }
+    } catch (e) {
+      console.error("Failed to resolve request", e);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -539,6 +575,31 @@ const App: React.FC = () => {
       }
     } catch (e) {
       console.error("Cleanup failed", e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEditRequestClick = (r: Restaurant) => {
+    if (!user) {
+      setIsLoginPromptOpen(true);
+      return;
+    }
+    setEditRequestRestaurant(r);
+    setIsEditRequestOpen(true);
+  };
+
+  const submitEditRequest = async (newCategory: string) => {
+    if (!editRequestRestaurant || !user) return;
+    setLoading(true);
+    try {
+      await requestCategoryEdit(editRequestRestaurant, newCategory, user);
+      setIsEditRequestOpen(false);
+      setEditRequestRestaurant(null);
+      alert("Request submitted! An admin will review your suggestion.");
+    } catch (e) {
+      console.error("Failed to submit request", e);
+      alert("Failed to submit request. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -696,6 +757,8 @@ const App: React.FC = () => {
             isSeeding={isSeeding}
             seedingStatus={seedingStatus}
             loading={loading}
+            categoryRequests={categoryRequests}
+            onResolveRequest={handleResolveRequest}
           />
         ) : (
           <main className="max-w-7xl mx-auto px-4 mt-6 sm:px-6 sm:mt-16">
@@ -848,6 +911,7 @@ const App: React.FC = () => {
                             onVoteOverall={handleVoteOverall}
                             userScore={getRestaurantPoints(restaurant) - Number(restaurant.basePoints) - Number(globalScores[restaurant.id] || 0)}
                             globalCommunityPoints={isGlobalLive ? Number(globalScores[restaurant.id] || 0) : undefined}
+                            onRequestEdit={handleEditRequestClick}
                             searchTerm={searchQuery}
                           />
                         );
@@ -976,6 +1040,42 @@ const App: React.FC = () => {
         isOpen={isTutorialOpen}
         onClose={() => setIsTutorialOpen(false)}
       />
+      {/* Category Edit Request Modal */}
+      {isEditRequestOpen && editRequestRestaurant && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl skew-y-0 transform transition-all">
+            <h3 className="text-2xl font-black text-slate-900 mb-2">Suggest Edit</h3>
+            <p className="text-slate-500 mb-6 font-medium">
+              Is <span className="font-bold text-slate-800">{editRequestRestaurant.name}</span> in the wrong category?
+            </p>
+
+            <div className="space-y-3 mb-8 max-h-[50vh] overflow-y-auto pr-2 custom-scrollbar">
+              {data?.categories.map(cat => (
+                <button
+                  key={cat}
+                  onClick={() => submitEditRequest(cat)}
+                  className={`w-full text-left px-4 py-3 rounded-xl font-bold transition-all flex items-center justify-between ${editRequestRestaurant.category === cat
+                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                    : 'bg-white border-2 border-slate-100 text-slate-600 hover:border-orange-200 hover:text-orange-600 hover:bg-orange-50'
+                    }`}
+                  disabled={editRequestRestaurant.category === cat}
+                >
+                  {cat}
+                  {editRequestRestaurant.category === cat && <span className="text-xs uppercase tracking-widest">Current</span>}
+                </button>
+              ))}
+            </div>
+
+            <button
+              onClick={() => { setIsEditRequestOpen(false); setEditRequestRestaurant(null); }}
+              className="w-full py-4 text-slate-400 font-black uppercase tracking-widest hover:text-slate-600 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

@@ -282,3 +282,65 @@ export const updateRestaurantCategory = async (id: string, newCategory: string, 
         throw error;
     }
 };
+
+/**
+ * Submits a request to change a restaurant's category.
+ */
+export const requestCategoryEdit = async (restaurant: Restaurant, newCategory: string, user: any) => {
+    if (!db) return;
+    try {
+        const requestRef = doc(collection(db, "category_requests"));
+        await setDoc(requestRef, {
+            id: requestRef.id,
+            restaurantId: restaurant.id,
+            restaurantName: restaurant.name,
+            currentCategory: restaurant.category,
+            requestedCategory: newCategory,
+            userId: user.uid,
+            userName: user.displayName,
+            status: 'pending',
+            submittedAt: Date.now()
+        });
+    } catch (error) {
+        console.error("Error submitting category request:", error);
+        throw error;
+    }
+};
+
+/**
+ * Retrieves all pending category edit requests.
+ */
+export const getCategoryRequests = async () => {
+    if (!db) return [];
+    try {
+        const q = query(collection(db, "category_requests"), where("status", "==", "pending"));
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => doc.data());
+    } catch (error) {
+        console.error("Error getting category requests:", error);
+        return [];
+    }
+};
+
+/**
+ * Resolves a category edit request (approve or reject).
+ */
+export const resolveCategoryRequest = async (requestId: string, approve: boolean, restaurantId?: string, newCategory?: string, oldCategory?: string) => {
+    if (!db) return;
+    try {
+        const requestRef = doc(db, "category_requests", requestId);
+
+        if (approve && restaurantId && newCategory && oldCategory) {
+            // Apply the category change using existing logic
+            await updateRestaurantCategory(restaurantId, newCategory, oldCategory);
+            // Mark request as approved
+            await deleteDoc(requestRef); // Or set status to 'approved' if we want history
+        } else {
+            // Just delete/reject the request
+            await deleteDoc(requestRef);
+        }
+    } catch (error) {
+        console.error("Error resolving category request:", error);
+        throw error;
+    }
+};

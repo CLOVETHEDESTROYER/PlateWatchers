@@ -44,3 +44,15 @@ export interface Coordinates {
   latitude: number;
   longitude: number;
 }
+
+export interface CategoryRequest {
+  id: string;             // Unique ID for the request
+  restaurantId: string;   // ID of the restaurant
+  restaurantName: string; // Name (snapshot for display)
+  currentCategory: string;// Old category
+  requestedCategory: string;// New category suggested
+  userId: string;         // Requestor ID
+  userName: string;       // Requestor Name
+  status: 'pending' | 'approved' | 'rejected';
+  submittedAt: number;
+}
