@@ -377,12 +377,7 @@ const App: React.FC = () => {
 
   const getRestaurantPoints = (restaurant: Restaurant): number => {
     const global: number = Number(globalScores[restaurant.id] || 0);
-    const catVote = userVotes.categoryVotes[restaurant.category];
-    let userBoost: number = 0;
-    if (catVote?.topId === restaurant.id) userBoost += 100;
-    if (catVote?.runnerUpId === restaurant.id) userBoost += 25;
-    if (userVotes.overallTopPick === restaurant.id) userBoost += 500;
-    return Number(restaurant.basePoints) + global + userBoost;
+    return Number(restaurant.basePoints) + global;
   };
 
   const groupedRestaurants = useMemo(() => {
