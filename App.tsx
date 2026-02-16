@@ -20,6 +20,19 @@ const App: React.FC = () => {
   const [showDebug, setShowDebug] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [location] = useState('Albuquerque, New Mexico');
+
+  const [errorLog, setErrorLog] = useState<string[]>([]);
+
+  useEffect(() => {
+    const onError = (e: ErrorEvent) => setErrorLog(p => [...p.slice(-49), `🛑 ${e.message}`]);
+    const onRejection = (e: PromiseRejectionEvent) => setErrorLog(p => [...p.slice(-49), `⚠️ ${e.reason}`]);
+    window.addEventListener('error', onError);
+    window.addEventListener('unhandledrejection', onRejection);
+    return () => {
+      window.removeEventListener('error', onError);
+      window.removeEventListener('unhandledrejection', onRejection);
+    };
+  }, []);
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<SearchResult | null>(null);
   const [globalScores, setGlobalScores] = useState<Record<string, number>>({});
@@ -950,6 +963,7 @@ const App: React.FC = () => {
         currentView={view}
         setView={setView}
         isAdmin={isAdmin}
+        onAdminLogin={() => setIsAdminLoginOpen(true)}
       />
 
       {/* Floating Action Button for Mobile Suggest */}
@@ -973,9 +987,20 @@ const App: React.FC = () => {
           {showDebug && (
             <div className="bg-black/95 text-green-400 text-[10px] font-mono p-3 max-h-[50vh] overflow-y-auto border-t-2 border-red-500">
               <div className="flex justify-between items-center mb-2">
-                <span className="text-red-400 font-bold">AUTH DEBUG LOG</span>
+                <span className="text-red-400 font-bold">DEBUG LOG</span>
                 <span className="text-yellow-400">user={user ? '✅' : '❌'} mobile={/iPhone|Android/i.test(navigator.userAgent) ? 'Y' : 'N'}</span>
               </div>
+
+              {/* Errors */}
+              {errorLog.length > 0 && (
+                <div className="mb-2 border-b border-red-900 pb-2">
+                  <div className="text-red-500 font-bold mb-1">ERRORS:</div>
+                  {errorLog.map((err, i) => (
+                    <div key={`err-${i}`} className="text-red-300 py-0.5">{err}</div>
+                  ))}
+                </div>
+              )}
+
               {authDebugLog.length === 0 ? (
                 <div className="text-gray-500">No auth events yet...</div>
               ) : (
