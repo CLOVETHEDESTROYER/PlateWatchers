@@ -962,29 +962,31 @@ const App: React.FC = () => {
       </button>
 
       {/* TEMPORARY: Auth Debug Panel - remove after fixing mobile auth */}
-      <div className="fixed bottom-0 left-0 right-0 z-[9999]" style={{ marginBottom: 'env(safe-area-inset-bottom)' }}>
-        <button
-          onClick={() => setShowDebug(!showDebug)}
-          className="absolute bottom-20 left-2 w-8 h-8 bg-red-600 text-white rounded-full text-xs font-bold shadow-lg z-50 flex items-center justify-center"
-        >
-          🐛
-        </button>
-        {showDebug && (
-          <div className="bg-black/95 text-green-400 text-[10px] font-mono p-3 max-h-[50vh] overflow-y-auto border-t-2 border-red-500">
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-red-400 font-bold">AUTH DEBUG LOG</span>
-              <span className="text-yellow-400">user={user ? '✅' : '❌'} mobile={/iPhone|Android/i.test(navigator.userAgent) ? 'Y' : 'N'}</span>
+      {isAdmin && (
+        <div className="fixed bottom-0 left-0 right-0 z-[9999]" style={{ marginBottom: 'env(safe-area-inset-bottom)' }}>
+          <button
+            onClick={() => setShowDebug(!showDebug)}
+            className="absolute bottom-20 left-2 w-8 h-8 bg-red-600 text-white rounded-full text-xs font-bold shadow-lg z-50 flex items-center justify-center"
+          >
+            🐛
+          </button>
+          {showDebug && (
+            <div className="bg-black/95 text-green-400 text-[10px] font-mono p-3 max-h-[50vh] overflow-y-auto border-t-2 border-red-500">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-red-400 font-bold">AUTH DEBUG LOG</span>
+                <span className="text-yellow-400">user={user ? '✅' : '❌'} mobile={/iPhone|Android/i.test(navigator.userAgent) ? 'Y' : 'N'}</span>
+              </div>
+              {authDebugLog.length === 0 ? (
+                <div className="text-gray-500">No auth events yet...</div>
+              ) : (
+                authDebugLog.map((log, i) => (
+                  <div key={i} className="py-0.5 border-b border-gray-800">{log}</div>
+                ))
+              )}
             </div>
-            {authDebugLog.length === 0 ? (
-              <div className="text-gray-500">No auth events yet...</div>
-            ) : (
-              authDebugLog.map((log, i) => (
-                <div key={i} className="py-0.5 border-b border-gray-800">{log}</div>
-              ))
-            )}
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
       {/* Login Prompt Modal (shown when non-logged-in user tries to Suggest) */}
       {isLoginPromptOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setIsLoginPromptOpen(false)}>
