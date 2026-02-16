@@ -14,10 +14,15 @@ const AllRestaurantsView: React.FC<AllRestaurantsViewProps> = ({ restaurants, on
     // ... (rest of useMemo logic unchanged)
     const grouped = useMemo((): Record<string, Restaurant[]> => {
         const groups: Record<string, Restaurant[]> = {};
-        const query = localSearch.toLowerCase().trim();
+        // Normalize: remove smart quotes
+        const query = localSearch.toLowerCase().replace(/[\u2018\u2019]/g, "'").trim();
 
         restaurants.forEach(r => {
-            if (query && !r.name.toLowerCase().includes(query) && !r.category.toLowerCase().includes(query)) {
+            // Normalize target text
+            const name = r.name.toLowerCase().replace(/[\u2018\u2019]/g, "'");
+            const cat = r.category.toLowerCase().replace(/[\u2018\u2019]/g, "'");
+
+            if (query && !name.includes(query) && !cat.includes(query)) {
                 return;
             }
             if (!groups[r.category]) groups[r.category] = [];

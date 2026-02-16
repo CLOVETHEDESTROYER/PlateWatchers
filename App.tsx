@@ -399,13 +399,18 @@ const App: React.FC = () => {
   const groupedRestaurants = useMemo(() => {
     if (!data) return {};
     const groups: Record<string, Restaurant[]> = {};
-    const query = searchQuery.toLowerCase().trim();
+    // Normalize query: remove smart quotes
+    const query = searchQuery.toLowerCase().replace(/[\u2018\u2019]/g, "'").trim();
     const terms = query.split(/\s+/).filter(t => t.length > 0);
 
     data.restaurants.forEach(r => {
       // Instant Local Filter
       if (terms.length > 0) {
-        const searchable = `${r.name} ${r.category} ${r.googlePlaceType || ''} ${r.address}`.toLowerCase();
+        // Normalize searchable text too
+        const searchable = `${r.name} ${r.category} ${r.googlePlaceType || ''} ${r.address}`
+          .toLowerCase()
+          .replace(/[\u2018\u2019]/g, "'");
+
         // Check if ALL search terms are present in the searchable string (AND logic)
         const matches = terms.every(term => searchable.includes(term));
         if (!matches) return;
