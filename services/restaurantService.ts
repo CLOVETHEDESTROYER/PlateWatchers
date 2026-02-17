@@ -84,10 +84,23 @@ export const saveRestaurant = async (restaurant: Restaurant) => {
 export const deleteRestaurant = async (id: string) => {
     if (!db) return;
     try {
-        await deleteDoc(doc(db, COLLECTION_NAME, id));
+        const batch = writeBatch(db);
+        const restaurantRef = doc(db, COLLECTION_NAME, id);
+        batch.delete(restaurantRef);
+
+        // Delete associated votes
+        const votesRef = collection(db, "user_votes");
+        const q = query(votesRef, where("restaurantId", "==", id));
+        const voteSnap = await getDocs(q);
+
+        voteSnap.forEach((doc) => {
+            batch.delete(doc.ref);
+        });
+
+        await batch.commit();
 
     } catch (error) {
-        console.error("Error deleting restaurant:", error);
+        console.error("Error deleting restaurant and votes:", error);
         throw error;
     }
 };

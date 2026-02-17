@@ -538,6 +538,25 @@ const App: React.FC = () => {
     }
   };
 
+  const handleDeleteRestaurant = async (id: string) => {
+    setLoading(true);
+    try {
+      await deleteRestaurant(id);
+      // Refresh data
+      const saved = await getSavedRestaurants();
+      const cats = new Set<string>();
+      saved.forEach(r => cats.add(r.category));
+      setData({
+        restaurants: saved,
+        categories: Array.from(cats).sort()
+      });
+    } catch (e) {
+      console.error("Failed to delete restaurant", e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleCleanup = async () => {
     if (!data) return;
     setLoading(true);
@@ -777,6 +796,12 @@ const App: React.FC = () => {
             loading={loading}
             categoryRequests={categoryRequests}
             onResolveRequest={handleResolveRequest}
+            onDelete={handleDeleteRestaurant}
+            onAdd={() => {
+              // We want to open the suggest modal, but pre-filled? No, just open it.
+              // Admin mode for suggest modal is already handled by `isAdmin` prop passed to SuggestModal
+              setIsSuggestModalOpen(true);
+            }}
           />
         ) : (
           <main className="max-w-7xl mx-auto px-4 mt-6 sm:px-6 sm:mt-16">

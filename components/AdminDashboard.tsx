@@ -15,6 +15,8 @@ interface AdminDashboardProps {
     loading: boolean;
     categoryRequests: CategoryRequest[];
     onResolveRequest: (req: CategoryRequest, approve: boolean) => Promise<void>;
+    onDelete: (id: string) => Promise<void>;
+    onAdd: () => void;
 }
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({
@@ -30,7 +32,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     seedingStatus,
     loading,
     categoryRequests,
-    onResolveRequest
+    onResolveRequest,
+    onDelete,
+    onAdd
 }) => {
     const [activeTab, setActiveTab] = useState<'tools' | 'approvals' | 'edit' | 'requests'>('approvals');
     const [editSearch, setEditSearch] = useState('');
@@ -76,6 +80,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             ← Back
                         </button>
                         <h1 className="text-xl sm:text-3xl font-black text-slate-900 ml-2 sm:ml-4">Admin Console</h1>
+                        <button
+                            onClick={onAdd}
+                            className="bg-emerald-500 text-white p-2 rounded-full hover:bg-emerald-600 transition-colors shadow-sm active:scale-95"
+                            title="Manually Add Restaurant"
+                        >
+                            <span className="text-xl font-bold">+</span>
+                        </button>
                     </div>
 
                     <div className="flex bg-slate-100 p-1 rounded-2xl overflow-x-auto">
@@ -248,12 +259,26 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                                 <span className="text-xs font-bold bg-slate-200 text-slate-600 px-2 py-1 rounded">
                                                     {r.category}
                                                 </span>
-                                                <button
-                                                    onClick={() => handleStartEdit(r)}
-                                                    className="text-blue-600 hover:text-blue-800 text-xs font-bold underline"
-                                                >
-                                                    Edit Category
-                                                </button>
+                                                <div className="flex items-center gap-2">
+                                                    <button
+                                                        onClick={() => handleStartEdit(r)}
+                                                        className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+                                                        title="Edit Category"
+                                                    >
+                                                        ✏️
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            if (confirm(`Are you sure you want to DELETE "${r.name}"?\n\nThis will also remove all associated votes. This action cannot be undone.`)) {
+                                                                onDelete(r.id);
+                                                            }
+                                                        }}
+                                                        className="p-2 text-red-400 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors"
+                                                        title="Delete Restaurant"
+                                                    >
+                                                        🗑️
+                                                    </button>
+                                                </div>
                                             </>
                                         )}
                                     </div>
