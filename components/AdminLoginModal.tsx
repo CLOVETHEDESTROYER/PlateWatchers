@@ -7,46 +7,24 @@ interface AdminLoginModalProps {
 }
 
 const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClose }) => {
-    const { loginWithEmail, registerAdmin, resetPassword } = useAuth();
+    const { loginWithEmail, resetPassword } = useAuth();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [resetSent, setResetSent] = useState(false);
-    const [showCreateButton, setShowCreateButton] = useState(false);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
         setError(null);
         setResetSent(false);
-        setShowCreateButton(false);
 
         try {
             await loginWithEmail(email, password);
             onClose();
         } catch (err: any) {
-
-            if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
-                // If it looks like the account doesn't exist, offer to create it
-                setShowCreateButton(true);
-            }
-            setError(err.message || 'Login failed');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleCreateAccount = async () => {
-        if (!email || !password) return;
-        setLoading(true);
-        setError(null);
-        try {
-            await registerAdmin(email, password);
-            alert("Admin account created successfully! You are now logged in.");
-            onClose();
-        } catch (err: any) {
-            setError(err.message || 'Registration failed');
+            setError('Invalid email or password.');
         } finally {
             setLoading(false);
         }
@@ -131,9 +109,7 @@ const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClose }) =>
 
                     {error && (
                         <div className="p-3 bg-red-50 border border-red-100 rounded-xl text-red-600 text-[11px] font-bold text-center">
-                            {error.includes('operation-not-allowed')
-                                ? "Enable Email/Pass in Firebase Console first!"
-                                : showCreateButton ? "Account not found. Would you like to create it?" : error}
+                            {error}
                         </div>
                     )}
 
@@ -143,24 +119,13 @@ const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClose }) =>
                         </div>
                     )}
 
-                    {showCreateButton ? (
-                        <button
-                            type="button"
-                            onClick={handleCreateAccount}
-                            disabled={loading}
-                            className="w-full bg-emerald-600 text-white py-4 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-xl active:scale-95 disabled:opacity-50 mt-4"
-                        >
-                            {loading ? 'Creating...' : 'Create Admin Account'}
-                        </button>
-                    ) : (
-                        <button
-                            type="submit"
-                            disabled={loading}
-                            className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-orange-600 transition-all shadow-xl active:scale-95 disabled:opacity-50 mt-4"
-                        >
-                            {loading ? 'Authenticating...' : 'Sign In'}
-                        </button>
-                    )}
+                    <button
+                        type="submit"
+                        disabled={loading}
+                        className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-orange-600 transition-all shadow-xl active:scale-95 disabled:opacity-50 mt-4"
+                    >
+                        {loading ? 'Authenticating...' : 'Sign In'}
+                    </button>
                 </form>
 
                 <p className="text-center text-[10px] text-slate-400 mt-8 font-medium">

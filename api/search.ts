@@ -105,6 +105,10 @@ export default async function handler(req: any, res: any) {
         return res.status(405).json({ error: 'Method not allowed' });
     }
 
+    // Rate limit: 20 requests/minute per IP (Gemini calls are expensive)
+    const { applyRateLimit } = await import('./_rateLimit');
+    if (applyRateLimit(req, res, 20, 60_000)) return;
+
     const { query, location, coords } = req.body;
     const apiKey = process.env.GEMINI_API_KEY;
 

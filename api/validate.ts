@@ -133,6 +133,10 @@ export default async function handler(req: any, res: any) {
         return res.status(405).json({ error: 'Method not allowed' });
     }
 
+    // Rate limit: 30 requests/minute per IP
+    const { applyRateLimit } = await import('./_rateLimit');
+    if (applyRateLimit(req, res, 30, 60_000)) return;
+
     const { restaurantName, location = "Albuquerque, New Mexico" } = req.body;
     const apiKey = process.env.GOOGLE_MAPS_API_KEY;
 
