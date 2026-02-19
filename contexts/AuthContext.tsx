@@ -8,7 +8,6 @@ import {
     signOut,
     signInWithEmailAndPassword,
     sendPasswordResetEmail,
-    createUserWithEmailAndPassword,
     browserLocalPersistence,
     setPersistence
 } from "firebase/auth";
@@ -21,7 +20,6 @@ interface AuthContextType {
     loginWithFacebook: () => Promise<void>;
     loginWithGoogle: () => Promise<void>;
     loginWithEmail: (email: string, pass: string) => Promise<void>;
-    registerAdmin: (email: string, pass: string) => Promise<void>;
     resetPassword: (email: string) => Promise<void>;
     logout: () => Promise<void>;
     error: string | null;
@@ -35,7 +33,6 @@ const AuthContext = createContext<AuthContextType>({
     loginWithFacebook: async () => { },
     loginWithGoogle: async () => { },
     loginWithEmail: async () => { },
-    registerAdmin: async () => { },
     resetPassword: async () => { },
     logout: async () => { },
     error: null,
@@ -202,22 +199,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
     };
 
-    const registerAdmin = async (email: string, pass: string) => {
-        setError(null);
-        try {
-            if (!auth) throw new Error("Firebase Auth not initialized");
-            await createUserWithEmailAndPassword(auth, email, pass);
-        } catch (err: any) {
-            if (err.code === 'auth/email-already-in-use') {
-                setError("Account already exists. Try signing in.");
-            } else if (err.code === 'auth/operation-not-allowed') {
-                setError("Email/Password login is not enabled in Firebase Console.");
-            } else {
-                setError("Registration failed. Check console.");
-            }
-            throw err;
-        }
-    };
+
 
     const resetPassword = async (email: string) => {
         setError(null);
@@ -245,7 +227,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     return (
-        <AuthContext.Provider value={{ user, isAdmin, loading, loginWithFacebook, loginWithGoogle, loginWithEmail, registerAdmin, resetPassword, logout, error, authDebugLog }}>
+        <AuthContext.Provider value={{ user, isAdmin, loading, loginWithFacebook, loginWithGoogle, loginWithEmail, resetPassword, logout, error, authDebugLog }}>
             {children}
         </AuthContext.Provider>
     );
