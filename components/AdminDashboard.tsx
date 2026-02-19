@@ -17,7 +17,9 @@ interface AdminDashboardProps {
     onResolveRequest: (req: CategoryRequest, approve: boolean) => Promise<void>;
     onDelete: (id: string) => Promise<void>;
     onAdd: () => void;
+    onUpdatePoints: (id: string, points: number) => Promise<void>;
     standardCategories: string[];
+    globalScores: Record<string, number>;
 }
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({
@@ -36,7 +38,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     onResolveRequest,
     onDelete,
     onAdd,
-    standardCategories
+    onUpdatePoints,
+    standardCategories,
+    globalScores
 }) => {
     const [activeTab, setActiveTab] = useState<'tools' | 'approvals' | 'edit' | 'requests'>('approvals');
     const [editSearch, setEditSearch] = useState('');
@@ -44,6 +48,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const [newCategory, setNewCategory] = useState('');
     const [isCreatingNew, setIsCreatingNew] = useState(false);
     const [customCategory, setCustomCategory] = useState('');
+    const [newBasePoints, setNewBasePoints] = useState<number>(100);
 
     const filteredRestaurants = React.useMemo(() => {
         if (!editSearch) return [];
@@ -58,18 +63,32 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const handleStartEdit = (r: Restaurant) => {
         setEditingId(r.id);
         setNewCategory(r.category);
+        setNewBasePoints(r.basePoints);
         setIsCreatingNew(false);
         setCustomCategory('');
     };
 
     const handleSaveCategory = async (r: Restaurant) => {
         const finalCategory = isCreatingNew ? customCategory.trim() : newCategory.trim();
-        if (!finalCategory || finalCategory === r.category) {
+        const categoryChanged = finalCategory !== r.category;
+        const pointsChanged = newBasePoints !== r.basePoints;
+
+        if (!finalCategory || (!categoryChanged && !pointsChanged)) {
             setEditingId(null);
             return;
         }
-        if (confirm(`Change category from "${r.category}" to "${finalCategory}"?\n\nWARNING: This will remove existing votes for this restaurant in the "${r.category}" category to prevent data inconsistency.`)) {
-            await onRecategorize(r.id, finalCategory, r.category);
+
+        if (categoryChanged) {
+            const communityPoints = globalScores[r.id] || 0;
+            if (confirm(`Change category from "${r.category}" to "${finalCategory}"?\n\nWARNING: You are about to clear individual vote history (worth ${communityPoints} pts) for this category.\n\nYou can manually add these points back to the "Base Points" field to preserve the restaurant's total impact.`)) {
+                await onRecategorize(r.id, finalCategory, r.category);
+                if (pointsChanged) {
+                    await onUpdatePoints(r.id, newBasePoints);
+                }
+                setEditingId(null);
+            }
+        } else if (pointsChanged) {
+            await onUpdatePoints(r.id, newBasePoints);
             setEditingId(null);
         }
     };
@@ -234,9 +253,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <div className="space-y-4">
                             {filteredRestaurants.map(r => (
                                 <div key={r.id} className="p-4 bg-slate-50 border border-slate-100 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                    <div>
+                                    <div className="flex-1">
                                         <h3 className="font-bold text-slate-900">{r.name}</h3>
-                                        <p className="text-xs text-slate-500">{r.address}</p>
+                                        <div className="flex items-center gap-2">
+                                            <p className="text-xs text-slate-500">{r.address}</p>
+                                            <span className="text-[10px] font-black text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded leading-none">
+                                                {(Number(r.basePoints) + (globalScores[r.id] || 0)).toLocaleString()} pts
+                                            </span>
+                                        </div>
                                     </div>
                                     <div className="flex items-center gap-3">
                                         {editingId === r.id ? (
@@ -262,15 +286,28 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                                             ))}
                                                         </select>
                                                     )}
+                                                    <div className="flex flex-col gap-1">
+                                                        <label className="text-[10px] font-bold text-slate-400 uppercase">Base Points</label>
+                                                        <input
+                                                            type="number"
+                                                            value={newBasePoints}
+                                                            onChange={(e) => setNewBasePoints(parseInt(e.target.value) || 0)}
+                                                            className="bg-white border border-slate-300 rounded-lg px-3 py-1 text-sm w-24 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                                                        />
+                                                    </div>
+                                                    <div className="flex flex-col gap-1 items-center">
+                                                        <label className="text-[10px] font-bold text-slate-400 uppercase">Comm. Points</label>
+                                                        <span className="text-sm font-bold text-slate-600 py-1">{globalScores[r.id] || 0}</span>
+                                                    </div>
                                                     <button
                                                         onClick={() => handleSaveCategory(r)}
-                                                        className="bg-green-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-green-700 transition-colors"
+                                                        className="bg-green-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-green-700 transition-colors h-fit mt-5"
                                                     >
                                                         Save
                                                     </button>
                                                     <button
                                                         onClick={() => setEditingId(null)}
-                                                        className="bg-slate-200 text-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-slate-300 transition-colors"
+                                                        className="bg-slate-200 text-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-slate-300 transition-colors h-fit mt-5"
                                                     >
                                                         Cancel
                                                     </button>

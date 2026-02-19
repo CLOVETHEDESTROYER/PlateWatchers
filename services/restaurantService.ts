@@ -97,10 +97,28 @@ export const deleteRestaurant = async (id: string) => {
             batch.delete(doc.ref);
         });
 
+        // Delete from global rankings too
+        const rankingRef = doc(db, "global_rankings", id);
+        batch.delete(rankingRef);
+
         await batch.commit();
 
     } catch (error) {
         console.error("Error deleting restaurant and votes:", error);
+        throw error;
+    }
+};
+
+/**
+ * Updates a restaurant's base points manually.
+ */
+export const updateRestaurantPoints = async (id: string, basePoints: number) => {
+    if (!db) return;
+    try {
+        const restaurantRef = doc(db, COLLECTION_NAME, id);
+        await setDoc(restaurantRef, { basePoints }, { merge: true });
+    } catch (error) {
+        console.error("Error updating points:", error);
         throw error;
     }
 };

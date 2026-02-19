@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { fetchRestaurants } from './services/geminiService';
-import { saveRestaurantsBatch, getSavedRestaurants, deleteUserVotes, approveSuggestion, rejectSuggestion, getPendingSuggestions, deleteRestaurant, updateRestaurantCategory, fixCategoryTypos, wipeAllRestaurants, requestCategoryEdit, getCategoryRequests, resolveCategoryRequest } from './services/restaurantService';
+import { saveRestaurantsBatch, getSavedRestaurants, deleteUserVotes, approveSuggestion, rejectSuggestion, getPendingSuggestions, deleteRestaurant, updateRestaurantCategory, fixCategoryTypos, wipeAllRestaurants, requestCategoryEdit, getCategoryRequests, resolveCategoryRequest, updateRestaurantPoints } from './services/restaurantService';
 import { Restaurant, UserVoteRecord, SearchResult, Coordinates, CategoryVote, CategoryRequest } from './types';
 import { STANDARD_CATEGORIES } from './categories';
 import RestaurantCard from './components/RestaurantCard';
@@ -643,6 +643,22 @@ const App: React.FC = () => {
     }
   };
 
+  const handleUpdateBasePoints = async (id: string, points: number) => {
+    setLoading(true);
+    try {
+      await updateRestaurantPoints(id, points);
+      // Refresh
+      const saved = await getSavedRestaurants();
+      const cats = new Set<string>();
+      saved.forEach(r => cats.add(r.category));
+      setData({ restaurants: saved, categories: Array.from(cats).sort() });
+    } catch (e) {
+      console.error("Failed to update points", e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 font-sans select-none relative">
       <div className="bg-mesh" />
@@ -804,6 +820,8 @@ const App: React.FC = () => {
               setIsSuggestModalOpen(true);
             }}
             standardCategories={STANDARD_CATEGORIES}
+            globalScores={globalScores}
+            onUpdatePoints={handleUpdateBasePoints}
           />
         ) : (
           <main className="max-w-7xl mx-auto px-4 mt-6 sm:px-6 sm:mt-16">
