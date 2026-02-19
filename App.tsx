@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { fetchRestaurants } from './services/geminiService';
 import { saveRestaurantsBatch, getSavedRestaurants, deleteUserVotes, approveSuggestion, rejectSuggestion, getPendingSuggestions, deleteRestaurant, updateRestaurantCategory, fixCategoryTypos, wipeAllRestaurants, requestCategoryEdit, getCategoryRequests, resolveCategoryRequest } from './services/restaurantService';
 import { Restaurant, UserVoteRecord, SearchResult, Coordinates, CategoryVote, CategoryRequest } from './types';
+import { STANDARD_CATEGORIES } from './categories';
 import RestaurantCard from './components/RestaurantCard';
 import SuggestModal from './components/SuggestModal';
 import AllRestaurantsView from './components/AllRestaurantsView';
@@ -802,6 +803,7 @@ const App: React.FC = () => {
               // Admin mode for suggest modal is already handled by `isAdmin` prop passed to SuggestModal
               setIsSuggestModalOpen(true);
             }}
+            standardCategories={STANDARD_CATEGORIES}
           />
         ) : (
           <main className="max-w-7xl mx-auto px-4 mt-6 sm:px-6 sm:mt-16">

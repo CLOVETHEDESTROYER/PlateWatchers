@@ -17,6 +17,7 @@ interface AdminDashboardProps {
     onResolveRequest: (req: CategoryRequest, approve: boolean) => Promise<void>;
     onDelete: (id: string) => Promise<void>;
     onAdd: () => void;
+    standardCategories: string[];
 }
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({
@@ -34,12 +35,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     categoryRequests,
     onResolveRequest,
     onDelete,
-    onAdd
+    onAdd,
+    standardCategories
 }) => {
     const [activeTab, setActiveTab] = useState<'tools' | 'approvals' | 'edit' | 'requests'>('approvals');
     const [editSearch, setEditSearch] = useState('');
     const [editingId, setEditingId] = useState<string | null>(null);
     const [newCategory, setNewCategory] = useState('');
+    const [isCreatingNew, setIsCreatingNew] = useState(false);
+    const [customCategory, setCustomCategory] = useState('');
 
     const filteredRestaurants = React.useMemo(() => {
         if (!editSearch) return [];
@@ -54,15 +58,18 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const handleStartEdit = (r: Restaurant) => {
         setEditingId(r.id);
         setNewCategory(r.category);
+        setIsCreatingNew(false);
+        setCustomCategory('');
     };
 
     const handleSaveCategory = async (r: Restaurant) => {
-        if (!newCategory.trim() || newCategory === r.category) {
+        const finalCategory = isCreatingNew ? customCategory.trim() : newCategory.trim();
+        if (!finalCategory || finalCategory === r.category) {
             setEditingId(null);
             return;
         }
-        if (confirm(`Change category from "${r.category}" to "${newCategory}"?\n\nWARNING: This will remove existing votes for this restaurant in the "${r.category}" category to prevent data inconsistency.`)) {
-            await onRecategorize(r.id, newCategory.trim(), r.category);
+        if (confirm(`Change category from "${r.category}" to "${finalCategory}"?\n\nWARNING: This will remove existing votes for this restaurant in the "${r.category}" category to prevent data inconsistency.`)) {
+            await onRecategorize(r.id, finalCategory, r.category);
             setEditingId(null);
         }
     };
@@ -233,25 +240,46 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                     </div>
                                     <div className="flex items-center gap-3">
                                         {editingId === r.id ? (
-                                            <div className="flex items-center gap-2">
-                                                <input
-                                                    type="text"
-                                                    value={newCategory}
-                                                    onChange={(e) => setNewCategory(e.target.value)}
-                                                    className="bg-white border border-slate-300 rounded-lg px-3 py-1 text-sm w-40"
-                                                    autoFocus
-                                                />
+                                            <div className="flex flex-col gap-2">
+                                                <div className="flex items-center gap-2">
+                                                    {isCreatingNew ? (
+                                                        <input
+                                                            type="text"
+                                                            value={customCategory}
+                                                            onChange={(e) => setCustomCategory(e.target.value)}
+                                                            placeholder="New category name..."
+                                                            className="bg-white border border-blue-300 rounded-lg px-3 py-1 text-sm w-44 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                                                            autoFocus
+                                                        />
+                                                    ) : (
+                                                        <select
+                                                            value={newCategory}
+                                                            onChange={(e) => setNewCategory(e.target.value)}
+                                                            className="bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-sm w-44 focus:outline-none focus:ring-2 focus:ring-blue-200 cursor-pointer"
+                                                        >
+                                                            {standardCategories.map(cat => (
+                                                                <option key={cat} value={cat}>{cat}</option>
+                                                            ))}
+                                                        </select>
+                                                    )}
+                                                    <button
+                                                        onClick={() => handleSaveCategory(r)}
+                                                        className="bg-green-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-green-700 transition-colors"
+                                                    >
+                                                        Save
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setEditingId(null)}
+                                                        className="bg-slate-200 text-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-slate-300 transition-colors"
+                                                    >
+                                                        Cancel
+                                                    </button>
+                                                </div>
                                                 <button
-                                                    onClick={() => handleSaveCategory(r)}
-                                                    className="bg-green-600 text-white px-3 py-1 rounded-lg text-xs font-bold hover:bg-green-700"
+                                                    onClick={() => { setIsCreatingNew(!isCreatingNew); setCustomCategory(''); }}
+                                                    className="text-[10px] font-bold text-blue-500 hover:text-blue-700 uppercase tracking-widest transition-colors self-start"
                                                 >
-                                                    Save
-                                                </button>
-                                                <button
-                                                    onClick={() => setEditingId(null)}
-                                                    className="bg-slate-200 text-slate-600 px-3 py-1 rounded-lg text-xs font-bold hover:bg-slate-300"
-                                                >
-                                                    Cancel
+                                                    {isCreatingNew ? '← Pick from list' : '+ New Category'}
                                                 </button>
                                             </div>
                                         ) : (
