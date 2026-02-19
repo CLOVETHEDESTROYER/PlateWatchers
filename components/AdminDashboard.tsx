@@ -42,7 +42,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     standardCategories,
     globalScores
 }) => {
-    const [activeTab, setActiveTab] = useState<'tools' | 'approvals' | 'edit' | 'requests'>('approvals');
+    const [activeTab, setActiveTab] = useState<'tools' | 'approvals' | 'edit' | 'requests' | 'rankings'>('approvals');
     const [editSearch, setEditSearch] = useState('');
     const [editingId, setEditingId] = useState<string | null>(null);
     const [newCategory, setNewCategory] = useState('');
@@ -59,6 +59,18 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
             r.googlePlaceType?.toLowerCase().includes(q)
         ).slice(0, 50); // Limit results
     }, [restaurants, editSearch]);
+
+    // Top 50 rankings
+    const top50 = React.useMemo(() => {
+        return [...restaurants]
+            .map(r => ({
+                ...r,
+                communityPts: globalScores[r.id] || 0,
+                totalPts: Number(r.basePoints) + (globalScores[r.id] || 0)
+            }))
+            .sort((a, b) => b.totalPts - a.totalPts)
+            .slice(0, 50);
+    }, [restaurants, globalScores]);
 
     const handleStartEdit = (r: Restaurant) => {
         setEditingId(r.id);
@@ -133,6 +145,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             className={`px-3 py-2 sm:px-6 sm:py-2 rounded-xl text-[10px] sm:text-sm font-black uppercase tracking-widest transition-all whitespace-nowrap ${activeTab === 'edit' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
                         >
                             Edit Data
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('rankings')}
+                            className={`px-3 py-2 sm:px-6 sm:py-2 rounded-xl text-[10px] sm:text-sm font-black uppercase tracking-widest transition-all whitespace-nowrap ${activeTab === 'rankings' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                        >
+                            Top 50
                         </button>
                         <button
                             onClick={() => setActiveTab('tools')}
@@ -464,6 +482,112 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 </div>
                             )}
                         </div>
+                    </div>
+                )}
+                {activeTab === 'rankings' && (
+                    <div className="bg-white/80 backdrop-blur-md border border-slate-200 rounded-2xl sm:rounded-3xl p-4 sm:p-8 shadow-sm">
+                        <div className="flex items-center gap-4 mb-6">
+                            <div className="w-12 h-12 bg-indigo-100 rounded-2xl flex items-center justify-center text-indigo-600 text-2xl">
+                                🏆
+                            </div>
+                            <div>
+                                <h2 className="text-xl font-black text-slate-800">Top 50 Rankings</h2>
+                                <p className="text-sm text-slate-500 font-medium">
+                                    {restaurants.length} total restaurants · {Object.keys(globalScores).length} with community votes
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Summary stats */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                            <div className="bg-indigo-50 rounded-2xl p-4 text-center">
+                                <div className="text-2xl font-black text-indigo-700">
+                                    {(Object.values(globalScores) as number[]).reduce((a: number, b: number) => a + b, 0).toLocaleString()}
+                                </div>
+                                <div className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mt-1">Total Community Pts</div>
+                            </div>
+                            <div className="bg-orange-50 rounded-2xl p-4 text-center">
+                                <div className="text-2xl font-black text-orange-700">
+                                    {(Object.values(globalScores) as number[]).filter((v: number) => v > 0).length}
+                                </div>
+                                <div className="text-[10px] font-black text-orange-400 uppercase tracking-widest mt-1">Restaurants Voted On</div>
+                            </div>
+                            <div className="bg-emerald-50 rounded-2xl p-4 text-center">
+                                <div className="text-2xl font-black text-emerald-700">
+                                    {top50.length > 0 ? top50[0].totalPts.toLocaleString() : '—'}
+                                </div>
+                                <div className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mt-1">#1 Total Score</div>
+                            </div>
+                            <div className="bg-slate-50 rounded-2xl p-4 text-center">
+                                <div className="text-2xl font-black text-slate-700">
+                                    {Object.values(globalScores).length > 0
+                                        ? Math.round((Object.values(globalScores) as number[]).filter((v: number) => v > 0).reduce((a: number, b: number) => a + b, 0) / Math.max((Object.values(globalScores) as number[]).filter((v: number) => v > 0).length, 1))
+                                        : '—'}
+                                </div>
+                                <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Avg Community Pts</div>
+                            </div>
+                        </div>
+
+                        {/* Rankings table */}
+                        <div className="overflow-x-auto">
+                            <table className="w-full">
+                                <thead>
+                                    <tr className="border-b-2 border-slate-200">
+                                        <th className="text-left text-[10px] font-black uppercase tracking-widest text-slate-400 py-3 px-2 w-12">#</th>
+                                        <th className="text-left text-[10px] font-black uppercase tracking-widest text-slate-400 py-3 px-2">Restaurant</th>
+                                        <th className="text-left text-[10px] font-black uppercase tracking-widest text-slate-400 py-3 px-2 hidden md:table-cell">Category</th>
+                                        <th className="text-right text-[10px] font-black uppercase tracking-widest text-slate-400 py-3 px-2">Base</th>
+                                        <th className="text-right text-[10px] font-black uppercase tracking-widest text-slate-400 py-3 px-2">Community</th>
+                                        <th className="text-right text-[10px] font-black uppercase tracking-widest text-slate-400 py-3 px-2">Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {top50.map((r, i) => (
+                                        <tr
+                                            key={r.id}
+                                            className={`border-b border-slate-50 hover:bg-orange-50/40 transition-colors ${i < 3 ? 'bg-amber-50/30' : ''
+                                                }`}
+                                        >
+                                            <td className="py-3 px-2">
+                                                <span className={`inline-flex items-center justify-center w-7 h-7 rounded-lg font-black text-xs ${i === 0 ? 'bg-amber-500 text-white shadow-md' :
+                                                    i === 1 ? 'bg-slate-400 text-white shadow-sm' :
+                                                        i === 2 ? 'bg-amber-700 text-white shadow-sm' :
+                                                            'bg-slate-100 text-slate-500'
+                                                    }`}>
+                                                    {i + 1}
+                                                </span>
+                                            </td>
+                                            <td className="py-3 px-2">
+                                                <div className="font-bold text-slate-900 text-sm">{r.name}</div>
+                                                <div className="text-[10px] text-slate-400 truncate max-w-[200px]">{r.address}</div>
+                                            </td>
+                                            <td className="py-3 px-2 hidden md:table-cell">
+                                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 bg-slate-100 px-2 py-1 rounded-md">
+                                                    {r.category}
+                                                </span>
+                                            </td>
+                                            <td className="py-3 px-2 text-right">
+                                                <span className="text-sm font-bold text-slate-500">{Number(r.basePoints).toLocaleString()}</span>
+                                            </td>
+                                            <td className="py-3 px-2 text-right">
+                                                <span className={`text-sm font-black ${r.communityPts > 0 ? 'text-indigo-600' : 'text-slate-300'}`}>
+                                                    {r.communityPts > 0 ? `+${r.communityPts.toLocaleString()}` : '0'}
+                                                </span>
+                                            </td>
+                                            <td className="py-3 px-2 text-right">
+                                                <span className="text-sm font-black text-orange-600">{r.totalPts.toLocaleString()}</span>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {top50.length === 0 && (
+                            <div className="text-center py-12 text-slate-400 font-bold uppercase tracking-widest text-sm">
+                                No restaurants found
+                            </div>
+                        )}
                     </div>
                 )}
             </div>

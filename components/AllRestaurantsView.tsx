@@ -5,9 +5,11 @@ interface AllRestaurantsViewProps {
     restaurants: Restaurant[];
     onBack: () => void;
     onSuggest?: () => void;
+    globalScores?: Record<string, number>;
 }
 
-const AllRestaurantsView: React.FC<AllRestaurantsViewProps> = ({ restaurants, onBack, onSuggest }) => {
+const AllRestaurantsView: React.FC<AllRestaurantsViewProps> = ({ restaurants, onBack, onSuggest, globalScores = {} }) => {
+    const getTotalPoints = (r: Restaurant) => Number(r.basePoints) + Number(globalScores[r.id] || 0);
     const [localSearch, setLocalSearch] = React.useState('');
 
     // Group restaurants by category and search
@@ -30,7 +32,7 @@ const AllRestaurantsView: React.FC<AllRestaurantsViewProps> = ({ restaurants, on
         });
         // Sort categories alphabetically
         return Object.keys(groups).sort().reduce((acc, key) => {
-            acc[key] = groups[key].sort((a, b) => a.name.localeCompare(b.name));
+            acc[key] = groups[key].sort((a, b) => getTotalPoints(b) - getTotalPoints(a));
             return acc;
         }, {} as Record<string, Restaurant[]>);
     }, [restaurants, localSearch]);
@@ -101,7 +103,7 @@ const AllRestaurantsView: React.FC<AllRestaurantsViewProps> = ({ restaurants, on
                         </div>
                     ) : (
                         <div className="space-y-12">
-                            {Object.entries(grouped).map(([category, items]) => (
+                            {(Object.entries(grouped) as [string, Restaurant[]][]).map(([category, items]) => (
                                 <section key={category}>
                                     <h2 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-3 border-b border-slate-100 pb-2">
                                         {highlightText(category, localSearch)}
@@ -109,7 +111,7 @@ const AllRestaurantsView: React.FC<AllRestaurantsViewProps> = ({ restaurants, on
                                     </h2>
 
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-4">
-                                        {items.map(r => (
+                                        {items.map((r: Restaurant) => (
                                             <div key={r.id} className="flex items-start gap-3 p-3 rounded-lg hover:bg-orange-50/50 transition-colors group">
                                                 <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-400 shrink-0 group-hover:bg-orange-100 group-hover:text-orange-600 transition-colors">
                                                     {r.name.charAt(0)}
@@ -122,7 +124,7 @@ const AllRestaurantsView: React.FC<AllRestaurantsViewProps> = ({ restaurants, on
                                                         {r.source === 'user-submitted' && (
                                                             <span className="text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">User Submitted</span>
                                                         )}
-                                                        <span>Score: {Math.round(r.basePoints)}</span>
+                                                        <span className="font-black text-orange-600">{getTotalPoints(r).toLocaleString()} pts</span>
                                                         {r.googleMapsUri && (
                                                             <a href={r.googleMapsUri} target="_blank" rel="noreferrer" className="text-blue-500 hover:underline">
                                                                 View Map

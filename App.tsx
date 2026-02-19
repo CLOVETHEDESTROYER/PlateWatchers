@@ -790,6 +790,7 @@ const App: React.FC = () => {
             restaurants={data?.restaurants || []}
             onBack={() => setView('dashboard')}
             onSuggest={() => setIsSuggestModalOpen(true)}
+            globalScores={globalScores}
           />
         ) : view === 'admin' ? (
           <AdminDashboard
@@ -859,7 +860,7 @@ const App: React.FC = () => {
                       <div className="font-black text-slate-800 leading-tight mb-2 line-clamp-2" title={r.name}>{r.name}</div>
                       <div className="flex items-center justify-between mt-auto">
                         <div className="text-xs font-black text-slate-400 uppercase">
-                          {(getRestaurantPoints(r) - Number(r.basePoints)).toLocaleString()} <span className="text-[9px] opacity-60">pts</span>
+                          {getRestaurantPoints(r).toLocaleString()} <span className="text-[9px] opacity-60">pts</span>
                         </div>
                       </div>
                     </div>
